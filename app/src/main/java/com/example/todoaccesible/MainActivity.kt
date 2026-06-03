@@ -15,10 +15,14 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.todoaccesible.data.preferences.TokenManager
+import com.example.todoaccesible.ui.dashboard.DashboardScreen
+import com.example.todoaccesible.ui.dashboard.DashboardViewModel
 import com.example.todoaccesible.ui.forgotpassword.ForgotPasswordScreen
 import com.example.todoaccesible.ui.forgotpassword.ForgotPasswordViewModel
 import com.example.todoaccesible.ui.login.LoginScreen
 import com.example.todoaccesible.ui.login.LoginViewModel
+import com.example.todoaccesible.ui.newproject.NewProjectScreen
+import com.example.todoaccesible.ui.newproject.NewProjectViewModel
 import com.example.todoaccesible.ui.register.RegisterScreen
 import com.example.todoaccesible.ui.register.RegisterViewModel
 import com.example.todoaccesible.ui.theme.TodoAccesibleTheme
@@ -54,7 +58,9 @@ class MainActivity : ComponentActivity() {
                                 onNavigateToRegister = { navController.navigate("register") },
                                 onNavigateToForgotPassword = { navController.navigate("forgot_password") },
                                 onLoginSuccess = { 
-                                    // Aquí navegarías a la pantalla principal (Home)
+                                    navController.navigate("dashboard") {
+                                        popUpTo("login") { inclusive = true }
+                                    }
                                 }
                             )
                         }
@@ -65,7 +71,6 @@ class MainActivity : ComponentActivity() {
                                 viewModel = registerViewModel,
                                 onNavigateBack = { navController.popBackStack() },
                                 onRegisterSuccess = {
-                                    // Al registrarse, volvemos al login para que inicie sesión
                                     navController.popBackStack()
                                 }
                             )
@@ -77,8 +82,26 @@ class MainActivity : ComponentActivity() {
                                 viewModel = forgotPasswordViewModel,
                                 onNavigateBack = { navController.popBackStack() },
                                 onResetSuccess = {
-                                    // Al recuperar contraseña con éxito, volvemos al login
                                     navController.popBackStack()
+                                }
+                            )
+                        }
+
+                        composable("dashboard") {
+                            val dashboardViewModel: DashboardViewModel = viewModel()
+                            DashboardScreen(
+                                viewModel = dashboardViewModel,
+                                onNavigateToNewProject = { navController.navigate("new_project") }
+                            )
+                        }
+
+                        composable("new_project") {
+                            val newProjectViewModel: NewProjectViewModel = viewModel()
+                            NewProjectScreen(
+                                viewModel = newProjectViewModel,
+                                onNavigateBack = { navController.popBackStack() },
+                                onStartEvaluation = {
+                                    // TODO: Navegar a Pantalla 6 - Formulario de Evaluación
                                 }
                             )
                         }
