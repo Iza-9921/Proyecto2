@@ -7,16 +7,22 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.example.todoaccesible.data.preferences.TokenManager
 import com.example.todoaccesible.ui.dashboard.DashboardScreen
 import com.example.todoaccesible.ui.dashboard.DashboardViewModel
+import com.example.todoaccesible.ui.evaluation.CameraCaptureScreen
+import com.example.todoaccesible.ui.evaluation.EvaluationScreen
+import com.example.todoaccesible.ui.evaluation.EvaluationViewModel
 import com.example.todoaccesible.ui.forgotpassword.ForgotPasswordScreen
 import com.example.todoaccesible.ui.forgotpassword.ForgotPasswordViewModel
 import com.example.todoaccesible.ui.login.LoginScreen
@@ -101,8 +107,37 @@ class MainActivity : ComponentActivity() {
                                 viewModel = newProjectViewModel,
                                 onNavigateBack = { navController.popBackStack() },
                                 onStartEvaluation = {
-                                    // TODO: Navegar a Pantalla 6 - Formulario de Evaluación
+                                    navController.navigate("evaluation")
                                 }
+                            )
+                        }
+
+                        composable("evaluation") {
+                            val evaluationViewModel: EvaluationViewModel = viewModel()
+                            EvaluationScreen(
+                                viewModel = evaluationViewModel,
+                                onNavigateBack = { navController.popBackStack() },
+                                onTakePhoto = { questionIndex ->
+                                    navController.navigate("camera_capture/$questionIndex")
+                                }
+                            )
+                        }
+
+                        composable(
+                            route = "camera_capture/{questionIndex}",
+                            arguments = listOf(navArgument("questionIndex") { type = NavType.IntType })
+                        ) { backStackEntry ->
+                            val questionIndex = backStackEntry.arguments?.getInt("questionIndex") ?: 0
+                            val evaluationEntry = remember(backStackEntry) {
+                                navController.getBackStackEntry("evaluation")
+                            }
+                            val evaluationViewModel: EvaluationViewModel = viewModel(evaluationEntry)
+                            CameraCaptureScreen(
+                                onImageCaptured = { uri ->
+                                    evaluationViewModel.onPhotoCaptured(questionIndex, uri)
+                                    navController.popBackStack()
+                                },
+                                onNavigateBack = { navController.popBackStack() }
                             )
                         }
                     }

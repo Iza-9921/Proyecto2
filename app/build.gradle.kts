@@ -7,12 +7,12 @@ plugins {
 
 android {
     namespace = "com.example.todoaccesible"
-    compileSdk = 36
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.example.todoaccesible"
         minSdk = 24
-        targetSdk = 36
+        targetSdk = 35
         versionCode = 1
         versionName = "1.0"
 
@@ -49,6 +49,9 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
+    
+    // Iconos de Material (Necesarios para ArrowBack y Camera)
+    implementation(libs.androidx.compose.material.icons.extended)
 
     // Retrofit
     implementation(libs.retrofit)
@@ -71,6 +74,9 @@ dependencies {
     // Navigation
     implementation(libs.navigation.compose)
     implementation(libs.lifecycle.viewmodel.compose)
+    
+    // Image Loading
+    implementation(libs.coil.compose)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
