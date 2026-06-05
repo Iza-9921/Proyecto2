@@ -4,11 +4,12 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -18,23 +19,27 @@ import androidx.compose.ui.unit.sp
 fun NewProjectScreen(
     viewModel: NewProjectViewModel,
     onNavigateBack: () -> Unit,
-    onStartEvaluation: () -> Unit
+    onProjectCreated: (String, String, String, String) -> Unit
 ) {
     val projectName by viewModel.projectName.collectAsState()
     val address by viewModel.address.collectAsState()
-    val city by viewModel.city.collectAsState()
-    val propertyType by viewModel.propertyType.collectAsState()
-    val contactName by viewModel.contactName.collectAsState()
+    val responsible by viewModel.contactName.collectAsState()
+    val description by viewModel.observations.collectAsState()
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Datos del Inmueble") },
+                title = { Text("Registro de Instalación", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Volver")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary
+                )
             )
         }
     ) { innerPadding ->
@@ -44,13 +49,18 @@ fun NewProjectScreen(
                 .padding(innerPadding)
                 .padding(24.dp)
                 .verticalScroll(rememberScrollState()),
-            horizontalAlignment = Alignment.CenterHorizontally
+            horizontalAlignment = Alignment.Start
         ) {
             Text(
-                text = "Nuevo Proyecto",
-                fontSize = 24.sp,
+                text = "Detalles del Proyecto",
+                fontSize = 22.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
+            )
+            Text(
+                text = "Ingresa la información de la sucursal o sede a evaluar.",
+                fontSize = 14.sp,
+                color = Color.Gray
             )
 
             Spacer(modifier = Modifier.height(32.dp))
@@ -58,7 +68,8 @@ fun NewProjectScreen(
             OutlinedTextField(
                 value = projectName,
                 onValueChange = { viewModel.onProjectNameChange(it) },
-                label = { Text("Nombre del Proyecto/Inmueble") },
+                label = { Text("Nombre del proyecto o sucursal") },
+                placeholder = { Text("Ej. Corporativo Santa Fe") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true
             )
@@ -68,51 +79,46 @@ fun NewProjectScreen(
             OutlinedTextField(
                 value = address,
                 onValueChange = { viewModel.onAddressChange(it) },
-                label = { Text("Dirección") },
+                label = { Text("Dirección completa") },
                 modifier = Modifier.fillMaxWidth(),
-                singleLine = true
+                singleLine = false,
+                minLines = 2
             )
 
             Spacer(modifier = Modifier.height(16.dp))
 
             OutlinedTextField(
-                value = city,
-                onValueChange = { viewModel.onCityChange(it) },
-                label = { Text("Ciudad") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            OutlinedTextField(
-                value = propertyType,
-                onValueChange = { viewModel.onPropertyTypeChange(it) },
-                label = { Text("Tipo de Inmueble (Oficina, Local, etc.)") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            OutlinedTextField(
-                value = contactName,
+                value = responsible,
                 onValueChange = { viewModel.onContactNameChange(it) },
-                label = { Text("Nombre del Contacto en Sitio") },
+                label = { Text("Persona Responsable") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true
             )
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(16.dp))
+
+            OutlinedTextField(
+                value = description,
+                onValueChange = { viewModel.onObservationsChange(it) },
+                label = { Text("Descripción / Notas (Opcional)") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = false,
+                minLines = 3
+            )
+
+            Spacer(modifier = Modifier.height(40.dp))
 
             Button(
-                onClick = { viewModel.startEvaluation(onStartEvaluation) },
+                onClick = { 
+                    onProjectCreated(projectName, address, responsible, description)
+                },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(50.dp),
-                enabled = projectName.isNotBlank() && address.isNotBlank() && city.isNotBlank()
+                    .height(56.dp),
+                enabled = projectName.isNotBlank() && address.isNotBlank() && responsible.isNotBlank(),
+                shape = MaterialTheme.shapes.medium
             ) {
-                Text("COMENZAR EVALUACIÓN")
+                Text("COMENZAR EVALUACIÓN", fontWeight = FontWeight.Bold, fontSize = 16.sp)
             }
         }
     }

@@ -97,22 +97,35 @@ class MainActivity : ComponentActivity() {
                             val dashboardViewModel: DashboardViewModel = viewModel()
                             DashboardScreen(
                                 viewModel = dashboardViewModel,
-                                onNavigateToNewProject = { navController.navigate("new_project") }
-                            )
-                        }
-
-                        composable("new_project") {
-                            val newProjectViewModel: NewProjectViewModel = viewModel()
-                            NewProjectScreen(
-                                viewModel = newProjectViewModel,
-                                onNavigateBack = { navController.popBackStack() },
-                                onStartEvaluation = {
-                                    navController.navigate("evaluation")
+                                onNavigateToNewProject = { navController.navigate("new_project") },
+                                onNavigateToProjectDetail = { projectId ->
+                                    navController.navigate("evaluation/$projectId")
                                 }
                             )
                         }
 
-                        composable("evaluation") {
+                        composable("new_project") {
+                            // Obtenemos el DashboardViewModel para agregar el nuevo proyecto
+                            val dashboardViewModel: DashboardViewModel = viewModel(
+                                viewModelStoreOwner = navController.getBackStackEntry("dashboard")
+                            )
+                            val newProjectViewModel: NewProjectViewModel = viewModel()
+                            
+                            NewProjectScreen(
+                                viewModel = newProjectViewModel,
+                                onNavigateBack = { navController.popBackStack() },
+                                onProjectCreated = { name, address, responsible, desc ->
+                                    dashboardViewModel.addProject(name, address, responsible, desc)
+                                    navController.popBackStack()
+                                }
+                            )
+                        }
+
+                        composable(
+                            route = "evaluation/{projectId}",
+                            arguments = listOf(navArgument("projectId") { type = NavType.StringType })
+                        ) { backStackEntry ->
+                            val projectId = backStackEntry.arguments?.getString("projectId") ?: ""
                             val evaluationViewModel: EvaluationViewModel = viewModel()
                             EvaluationScreen(
                                 viewModel = evaluationViewModel,
