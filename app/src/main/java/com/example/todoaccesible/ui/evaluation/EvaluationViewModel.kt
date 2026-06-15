@@ -2,11 +2,15 @@ package com.example.todoaccesible.ui.evaluation
 
 import android.net.Uri
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.example.todoaccesible.data.local.dao.AnswerDao
+import com.example.todoaccesible.data.local.entities.AnswerEntity
 import com.example.todoaccesible.data.model.Question
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 
-class EvaluationViewModel : ViewModel() {
+class EvaluationViewModel(private val answerDao: AnswerDao) : ViewModel() {
 
     private val _questions = MutableStateFlow(listOf(
         Question(1, "¿El acceso principal cuenta con rampa?"),
@@ -39,6 +43,21 @@ class EvaluationViewModel : ViewModel() {
     fun previousQuestion() {
         if (_currentQuestionIndex.value > 0) {
             _currentQuestionIndex.value--
+        }
+    }
+
+    fun finishEvaluation(projectId: String, onSuccess: () -> Unit) {
+        viewModelScope.launch {
+            val answersToSave = _questions.value.map { question ->
+                AnswerEntity(
+                    projectId = projectId,
+                    questionId = question.id,
+                    answer = question.answer ?: "SIN RESPUESTA",
+                    photoUri = question.photoUri?.toString()
+                )
+            }
+            answerDao.insertAnswers(answersToSave)
+            onSuccess()
         }
     }
 }

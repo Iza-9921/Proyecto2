@@ -14,6 +14,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.todoaccesible.data.local.entities.ProjectEntity
 import com.example.todoaccesible.data.model.UserRole
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -24,7 +25,8 @@ fun DashboardScreen(
     onNavigateToProjectDetail: (String) -> Unit
 ) {
     val userRole by viewModel.userRole.collectAsState()
-    val projects by viewModel.projects.collectAsState()
+    // Recolectamos el Flow de proyectos desde la base de datos Room
+    val projects by viewModel.projectsFlow.collectAsState(initial = emptyList())
     val pendingDiagnostics by viewModel.pendingDiagnostics.collectAsState()
 
     Scaffold(
@@ -97,7 +99,7 @@ fun DashboardScreen(
 }
 
 @Composable
-fun ProjectCard(project: Project, onClick: () -> Unit) {
+fun ProjectCard(project: ProjectEntity, onClick: () -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
