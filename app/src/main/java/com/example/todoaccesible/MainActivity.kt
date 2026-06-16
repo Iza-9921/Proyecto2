@@ -205,9 +205,9 @@ class MainActivity : ComponentActivity() {
                             route = "diagnosis_confirmation/{projectId}",
                             arguments = listOf(navArgument("projectId") { type = NavType.StringType })
                         ) { backStackEntry ->
-                            val projectId = backStackEntry.arguments?.getString("projectId") ?: ""
+                            // Quitamos el ID del nombre para que no se vea feo en la pantalla final
                             DiagnosisConfirmationScreen(
-                                projectName = "Instalación $projectId",
+                                projectName = "Instalación",
                                 onNavigateToQuotation = { navController.navigate("quotation") },
                                 onFinish = {
                                     navController.navigate("dashboard") {
