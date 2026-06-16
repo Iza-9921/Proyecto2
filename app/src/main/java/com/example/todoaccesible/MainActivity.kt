@@ -7,6 +7,9 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.ViewModel
@@ -22,6 +25,7 @@ import com.example.todoaccesible.data.local.AppDatabase
 import com.example.todoaccesible.data.local.dao.AnswerDao
 import com.example.todoaccesible.data.local.dao.ProjectDao
 import com.example.todoaccesible.data.local.dao.QuotationDao
+import com.example.todoaccesible.data.model.UserRole
 import com.example.todoaccesible.data.preferences.TokenManager
 import com.example.todoaccesible.ui.dashboard.DashboardScreen
 import com.example.todoaccesible.ui.dashboard.DashboardViewModel
@@ -78,7 +82,7 @@ class MainActivity : ComponentActivity() {
                                 viewModel = loginViewModel,
                                 onNavigateToRegister = { navController.navigate("register") },
                                 onNavigateToForgotPassword = { navController.navigate("forgot_password") },
-                                onLoginSuccess = {
+                                onLoginSuccess = { role ->
                                     navController.navigate("dashboard") {
                                         popUpTo("login") { inclusive = true }
                                     }
@@ -110,7 +114,7 @@ class MainActivity : ComponentActivity() {
                             )
                         }
 
-                        // --- DASHBOARD (MIS PROYECTOS) ---
+                        // --- DASHBOARD ---
                         composable("dashboard") {
                             val dashboardViewModel: DashboardViewModel = viewModel(
                                 factory = object : ViewModelProvider.Factory {
@@ -120,16 +124,25 @@ class MainActivity : ComponentActivity() {
                                     }
                                 }
                             )
+                            
+                            // Cargamos el rol guardado en el ViewModel
+                            val role by tokenManager.getRole.collectAsState(initial = UserRole.CLIENTE)
+                            LaunchedEffect(role) {
+                                dashboardViewModel.setRole(role)
+                            }
+
                             DashboardScreen(
                                 viewModel = dashboardViewModel,
-                                onNavigateToNewProject = { navController.navigate("new_project") },
+                                onNavigateToNewProject = { 
+                                    if (role == UserRole.CLIENTE) navController.navigate("new_project") 
+                                },
                                 onNavigateToProjectDetail = { projectId ->
-                                    navController.navigate("evaluation/$projectId")
+                                    if (role == UserRole.CLIENTE) navController.navigate("evaluation/$projectId")
                                 }
                             )
                         }
 
-                        // --- NUEVO PROYECTO ---
+                        // --- NUEVO PROYECTO (SOLO CLIENTE) ---
                         composable("new_project") {
                             val dashboardEntry = remember(it) { navController.getBackStackEntry("dashboard") }
                             val dashboardViewModel: DashboardViewModel = viewModel(dashboardEntry)
@@ -145,7 +158,7 @@ class MainActivity : ComponentActivity() {
                             )
                         }
 
-                        // --- EVALUACIÓN (CON PREGUNTAS) ---
+                        // --- EVALUACIÓN (SOLO CLIENTE) ---
                         composable(
                             route = "evaluation/{projectId}",
                             arguments = listOf(navArgument("projectId") { type = NavType.StringType })
@@ -179,25 +192,33 @@ class MainActivity : ComponentActivity() {
                         ) { backStackEntry ->
                             val questionIndex = backStackEntry.arguments?.getInt("questionIndex") ?: 0
                             val evaluationEntry = remember(backStackEntry) {
-                                navController.getBackStackEntry("evaluation/{projectId}")
-                            }
-                            // Usamos el mismo ViewModel de la evaluación para no perder los datos
-                            val evaluationViewModel: EvaluationViewModel = viewModel(
-                                viewModelStoreOwner = evaluationEntry,
-                                factory = object : ViewModelProvider.Factory {
-                                    override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                                        @Suppress("UNCHECKED_CAST")
-                                        return EvaluationViewModel(db.answerDao()) as T
-                                    }
+                                try {
+                                    navController.getBackStackEntry("evaluation/{projectId}")
+                                } catch (e: Exception) {
+                                    null
                                 }
-                            )
-                            CameraCaptureScreen(
-                                onImageCaptured = { uri ->
-                                    evaluationViewModel.onPhotoCaptured(questionIndex, uri)
-                                    navController.popBackStack()
-                                },
-                                onNavigateBack = { navController.popBackStack() }
-                            )
+                            }
+                            
+                            if (evaluationEntry != null) {
+                                val evaluationViewModel: EvaluationViewModel = viewModel(
+                                    viewModelStoreOwner = evaluationEntry,
+                                    factory = object : ViewModelProvider.Factory {
+                                        override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                                            @Suppress("UNCHECKED_CAST")
+                                            return EvaluationViewModel(db.answerDao()) as T
+                                        }
+                                    }
+                                )
+                                CameraCaptureScreen(
+                                    onImageCaptured = { uri ->
+                                        evaluationViewModel.onPhotoCaptured(questionIndex, uri)
+                                        navController.popBackStack()
+                                    },
+                                    onNavigateBack = { navController.popBackStack() }
+                                )
+                            } else {
+                                LaunchedEffect(Unit) { navController.popBackStack() }
+                            }
                         }
 
                         // --- CONFIRMACIÓN Y DIAGNÓSTICO PREMIUM ---
@@ -205,7 +226,6 @@ class MainActivity : ComponentActivity() {
                             route = "diagnosis_confirmation/{projectId}",
                             arguments = listOf(navArgument("projectId") { type = NavType.StringType })
                         ) { backStackEntry ->
-                            // Quitamos el ID del nombre para que no se vea feo en la pantalla final
                             DiagnosisConfirmationScreen(
                                 projectName = "Instalación",
                                 onNavigateToQuotation = { navController.navigate("quotation") },

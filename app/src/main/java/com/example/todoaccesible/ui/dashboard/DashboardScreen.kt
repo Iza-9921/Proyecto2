@@ -1,5 +1,6 @@
 package com.example.todoaccesible.ui.dashboard
 
+import android.content.Intent
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -11,11 +12,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.example.todoaccesible.data.local.entities.ProjectEntity
 import com.example.todoaccesible.data.model.UserRole
+import com.example.todoaccesible.ui.specialist.activity.RevisarDiagnosticoActivity
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -25,14 +27,19 @@ fun DashboardScreen(
     onNavigateToProjectDetail: (String) -> Unit
 ) {
     val userRole by viewModel.userRole.collectAsState()
-    // Recolectamos el Flow de proyectos desde la base de datos Room
     val projects by viewModel.projectsFlow.collectAsState(initial = emptyList())
     val pendingDiagnostics by viewModel.pendingDiagnostics.collectAsState()
+    val context = LocalContext.current
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Todo Accesible - Dashboard", fontWeight = FontWeight.Bold) },
+                title = { 
+                    Text(
+                        text = if (userRole == UserRole.CLIENTE) "Todo Accesible - Mis Proyectos" else "Panel de Especialista", 
+                        fontWeight = FontWeight.Bold 
+                    ) 
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primary,
                     titleContentColor = MaterialTheme.colorScheme.onPrimary
@@ -40,6 +47,7 @@ fun DashboardScreen(
             )
         },
         floatingActionButton = {
+            // Solo el cliente puede crear nuevos proyectos
             if (userRole == UserRole.CLIENTE) {
                 ExtendedFloatingActionButton(
                     onClick = onNavigateToNewProject,
@@ -58,14 +66,6 @@ fun DashboardScreen(
                 .padding(16.dp)
         ) {
             if (userRole == UserRole.CLIENTE) {
-                Text(
-                    text = "Mis Proyectos",
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                
                 if (projects.isEmpty()) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text("No tienes proyectos registrados", color = Color.Gray)
@@ -81,16 +81,23 @@ fun DashboardScreen(
                     }
                 }
             } else {
+                // Vista para el Especialista: Solo ve diagnósticos pendientes
                 Text(
-                    text = "Diagnósticos Pendientes",
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold
+                    text = "Diagnósticos Pendientes de Revisión",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier.padding(bottom = 16.dp)
                 )
-                Spacer(modifier = Modifier.height(16.dp))
+                
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     items(pendingDiagnostics) { diagnostic ->
-                        DiagnosticCard(diagnostic)
+                        DiagnosticCard(
+                            diagnostic = diagnostic,
+                            onReviewClick = {
+                                val intent = Intent(context, RevisarDiagnosticoActivity::class.java)
+                                context.startActivity(intent)
+                            }
+                        )
                     }
                 }
             }
@@ -121,11 +128,11 @@ fun ProjectCard(project: ProjectEntity, onClick: () -> Unit) {
                 )
                 ComplianceBadge(percentage = project.compliancePercentage)
             }
-            
+
             Spacer(modifier = Modifier.height(8.dp))
             
             Text(text = "Estado: ${project.status}", style = MaterialTheme.typography.bodyMedium)
-            Text(text = "Última evaluación: ${project.lastEvaluationDate}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+            Text(text = "Fecha: ${project.lastEvaluationDate}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
             
             Spacer(modifier = Modifier.height(8.dp))
             
@@ -156,15 +163,15 @@ fun ComplianceBadge(percentage: Int) {
 }
 
 @Composable
-fun DiagnosticCard(diagnostic: Diagnostic) {
+fun DiagnosticCard(diagnostic: Diagnostic, onReviewClick: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(diagnostic.projectName, style = MaterialTheme.typography.titleLarge)
-            Text("Solicitante: ${diagnostic.clientName}")
-            Text("Fecha: ${diagnostic.date}", style = MaterialTheme.typography.bodySmall)
+            Text(diagnostic.projectName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text("Cliente: ${diagnostic.clientName}", style = MaterialTheme.typography.bodyMedium)
+            Text("Fecha: ${diagnostic.date}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
             
             Spacer(modifier = Modifier.height(12.dp))
             
@@ -172,8 +179,8 @@ fun DiagnosticCard(diagnostic: Diagnostic) {
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End
             ) {
-                TextButton(onClick = { /* TODO */ }) { Text("VER DETALLE") }
-                Button(onClick = { /* TODO */ }) { Text("VALIDAR") }
+                TextButton(onClick = onReviewClick) { Text("VER DETALLES") }
+                Button(onClick = onReviewClick) { Text("REVISAR") }
             }
         }
     }
