@@ -22,17 +22,11 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.room.Room
 import com.example.todoaccesible.data.local.AppDatabase
-import com.example.todoaccesible.data.local.dao.AnswerDao
-import com.example.todoaccesible.data.local.dao.ProjectDao
-import com.example.todoaccesible.data.local.dao.QuotationDao
 import com.example.todoaccesible.data.model.UserRole
 import com.example.todoaccesible.data.preferences.TokenManager
 import com.example.todoaccesible.ui.dashboard.DashboardScreen
 import com.example.todoaccesible.ui.dashboard.DashboardViewModel
-import com.example.todoaccesible.ui.evaluation.CameraCaptureScreen
-import com.example.todoaccesible.ui.evaluation.DiagnosisConfirmationScreen
-import com.example.todoaccesible.ui.evaluation.EvaluationScreen
-import com.example.todoaccesible.ui.evaluation.EvaluationViewModel
+import com.example.todoaccesible.ui.evaluation.*
 import com.example.todoaccesible.ui.forgotpassword.ForgotPasswordScreen
 import com.example.todoaccesible.ui.forgotpassword.ForgotPasswordViewModel
 import com.example.todoaccesible.ui.login.LoginScreen
@@ -125,7 +119,6 @@ class MainActivity : ComponentActivity() {
                                 }
                             )
                             
-                            // Cargamos el rol guardado en el ViewModel
                             val role by tokenManager.getRole.collectAsState(initial = UserRole.CLIENTE)
                             LaunchedEffect(role) {
                                 dashboardViewModel.setRole(role)
@@ -142,7 +135,7 @@ class MainActivity : ComponentActivity() {
                             )
                         }
 
-                        // --- NUEVO PROYECTO (SOLO CLIENTE) ---
+                        // --- NUEVO PROYECTO ---
                         composable("new_project") {
                             val dashboardEntry = remember(it) { navController.getBackStackEntry("dashboard") }
                             val dashboardViewModel: DashboardViewModel = viewModel(dashboardEntry)
@@ -158,7 +151,7 @@ class MainActivity : ComponentActivity() {
                             )
                         }
 
-                        // --- EVALUACIÓN (SOLO CLIENTE) ---
+                        // --- EVALUACIÓN (ENCUESTA) ---
                         composable(
                             route = "evaluation/{projectId}",
                             arguments = listOf(navArgument("projectId") { type = NavType.StringType })
@@ -180,7 +173,28 @@ class MainActivity : ComponentActivity() {
                                     navController.navigate("camera_capture/$questionIndex")
                                 },
                                 onEvaluationFinished = { id ->
-                                    navController.navigate("diagnosis_confirmation/$id")
+                                    // Ahora navegamos a la pantalla de resultados
+                                    navController.navigate("evaluation_results/$id")
+                                }
+                            )
+                        }
+
+                        // --- RESULTADOS DE ACCESIBILIDAD ---
+                        composable(
+                            route = "evaluation_results/{projectId}",
+                            arguments = listOf(navArgument("projectId") { type = NavType.StringType })
+                        ) { backStackEntry ->
+                            val projectId = backStackEntry.arguments?.getString("projectId") ?: ""
+                            // Recuperamos el ViewModel de la evaluación (compartido)
+                            val evaluationEntry = remember(backStackEntry) {
+                                navController.getBackStackEntry("evaluation/{projectId}")
+                            }
+                            val evaluationViewModel: EvaluationViewModel = viewModel(evaluationEntry)
+                            
+                            EvaluationResultsScreen(
+                                result = evaluationViewModel.calculateResult(),
+                                onContinue = {
+                                    navController.navigate("diagnosis_confirmation/$projectId")
                                 }
                             )
                         }
@@ -221,7 +235,7 @@ class MainActivity : ComponentActivity() {
                             }
                         }
 
-                        // --- CONFIRMACIÓN Y DIAGNÓSTICO PREMIUM ---
+                        // --- CONFIRMACIÓN FINAL ---
                         composable(
                             route = "diagnosis_confirmation/{projectId}",
                             arguments = listOf(navArgument("projectId") { type = NavType.StringType })
