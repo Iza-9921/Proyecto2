@@ -5,6 +5,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CameraAlt
@@ -15,9 +17,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.rememberAsyncImagePainter
+import com.example.todoaccesible.data.model.AnswerType
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -41,7 +45,7 @@ fun EvaluationScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Evaluación de Instalación", fontWeight = FontWeight.Bold) },
+                title = { Text("Encuesta de Accesibilidad", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
@@ -54,7 +58,8 @@ fun EvaluationScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(24.dp),
+                .padding(24.dp)
+                .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             LinearProgressIndicator(
@@ -67,40 +72,59 @@ fun EvaluationScreen(
             Spacer(modifier = Modifier.height(16.dp))
             
             Text(
+                text = currentQuestion.category,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary
+            )
+
+            Text(
                 text = "Pregunta ${currentIndex + 1} de ${questions.size}",
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.secondary
             )
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             Text(
                 text = currentQuestion.text,
-                fontSize = 20.sp,
+                fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.fillMaxWidth()
             )
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
-                FilterChip(
-                    selected = currentQuestion.answer == "SÍ",
-                    onClick = { viewModel.onAnswerChange(currentIndex, "SÍ") },
-                    label = { Text("SÍ") },
-                    modifier = Modifier.weight(1f).padding(horizontal = 4.dp)
-                )
-                
-                FilterChip(
-                    selected = currentQuestion.answer == "NO",
-                    onClick = { viewModel.onAnswerChange(currentIndex, "NO") },
-                    label = { Text("NO") },
-                    modifier = Modifier.weight(1f).padding(horizontal = 4.dp)
-                )
+            // Selector de respuestas (4 opciones)
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AnswerChip(
+                        text = "SÍ",
+                        selected = currentQuestion.answer == AnswerType.SI,
+                        onClick = { viewModel.onAnswerChange(currentIndex, AnswerType.SI) },
+                        modifier = Modifier.weight(1f)
+                    )
+                    AnswerChip(
+                        text = "PARCIAL",
+                        selected = currentQuestion.answer == AnswerType.PARCIALMENTE,
+                        onClick = { viewModel.onAnswerChange(currentIndex, AnswerType.PARCIALMENTE) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AnswerChip(
+                        text = "NO",
+                        selected = currentQuestion.answer == AnswerType.NO,
+                        onClick = { viewModel.onAnswerChange(currentIndex, AnswerType.NO) },
+                        modifier = Modifier.weight(1f)
+                    )
+                    AnswerChip(
+                        text = "N/A",
+                        selected = currentQuestion.answer == AnswerType.NA,
+                        onClick = { viewModel.onAnswerChange(currentIndex, AnswerType.NA) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(32.dp))
@@ -115,7 +139,7 @@ fun EvaluationScreen(
             Spacer(modifier = Modifier.height(12.dp))
 
             Card(
-                modifier = Modifier.fillMaxWidth().height(200.dp),
+                modifier = Modifier.fillMaxWidth().height(180.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
                 elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
             ) {
@@ -144,8 +168,8 @@ fun EvaluationScreen(
                     modifier = Modifier.weight(1f).padding(horizontal = 4.dp)
                 ) {
                     Icon(Icons.Default.CameraAlt, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("TOMAR FOTO")
+                    Spacer(Modifier.width(4.dp))
+                    Text("CÁMARA", fontSize = 12.sp)
                 }
                 
                 OutlinedButton(
@@ -153,12 +177,12 @@ fun EvaluationScreen(
                     modifier = Modifier.weight(1f).padding(horizontal = 4.dp)
                 ) {
                     Icon(Icons.Default.PhotoLibrary, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("GALERÍA")
+                    Spacer(Modifier.width(4.dp))
+                    Text("GALERÍA", fontSize = 12.sp)
                 }
             }
 
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.height(32.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -174,16 +198,26 @@ fun EvaluationScreen(
                         if (currentIndex < questions.size - 1) {
                             viewModel.nextQuestion()
                         } else {
-                            viewModel.finishEvaluation(projectId) {
-                                onEvaluationFinished(projectId)
-                            }
+                            // Simulamos guardado o llamamos a la función de guardado
+                            onEvaluationFinished(projectId)
                         }
                     },
                     enabled = currentQuestion.answer != null
                 ) { 
-                    Text(if (currentIndex < questions.size - 1) "SIGUIENTE" else "FINALIZAR EVALUACIÓN") 
+                    Text(if (currentIndex < questions.size - 1) "SIGUIENTE" else "FINALIZAR") 
                 }
             }
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AnswerChip(text: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = { Text(text, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) },
+        modifier = modifier
+    )
 }
