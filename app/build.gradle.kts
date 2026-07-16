@@ -11,7 +11,7 @@ android {
 
     defaultConfig {
         applicationId = "com.example.todoaccesible"
-        minSdk = 24
+        minSdk = 26
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
@@ -34,10 +34,17 @@ android {
     }
     kotlinOptions {
         jvmTarget = "11"
+        freeCompilerArgs += listOf(
+            "-opt-in=androidx.compose.material3.ExperimentalMaterial3Api"
+        )
     }
     buildFeatures {
         compose = true
-        viewBinding = true
+    }
+    packaging {
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
     }
 }
 
@@ -50,11 +57,11 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
-    
+
     // Iconos de Material
     implementation(libs.androidx.compose.material.icons.extended)
 
-    // Retrofit
+    // Retrofit (capa de red reservada para cuando exista el backend)
     implementation(libs.retrofit)
     implementation(libs.retrofit.gson)
 
@@ -63,28 +70,18 @@ dependencies {
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)
 
-    // CameraX
-    implementation(libs.camera.core)
-    implementation(libs.camera.camera2)
-    implementation(libs.camera.lifecycle)
-    implementation(libs.camera.view)
-
     // DataStore
     implementation(libs.datastore.preferences)
 
     // Navigation
     implementation(libs.navigation.compose)
     implementation(libs.lifecycle.viewmodel.compose)
-    
+
     // Image Loading
     implementation(libs.coil.compose)
 
-    // Material Components for XML layouts
-    implementation("com.google.android.material:material:1.12.0")
-    implementation("androidx.appcompat:appcompat:1.7.0")
-    implementation("androidx.constraintlayout:constraintlayout:2.2.0")
-    implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")
-    implementation("androidx.viewpager2:viewpager2:1.1.0")
+    // Excel export
+    implementation(libs.apache.poi.ooxml)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
