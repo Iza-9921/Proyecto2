@@ -95,7 +95,14 @@ fun QuestionnaireScreen(
                     AnswerOptionButton("AP", AnswerValue.APROBADO, uiState.currentAnswerValue, viewModel::selectAnswer, Modifier.weight(1f))
                     AnswerOptionButton("P", AnswerValue.PENDIENTE, uiState.currentAnswerValue, viewModel::selectAnswer, Modifier.weight(1f))
                     AnswerOptionButton("NC", AnswerValue.NO_CUMPLE, uiState.currentAnswerValue, viewModel::selectAnswer, Modifier.weight(1f))
-                    AnswerOptionButton("NA", AnswerValue.NO_APLICA, uiState.currentAnswerValue, viewModel::selectAnswer, Modifier.weight(1f))
+                }
+
+                if (!uiState.canAdvance) {
+                    Text(
+                        text = "Selecciona una respuesta para poder continuar.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error
+                    )
                 }
 
                 OutlinedTextField(
@@ -129,6 +136,7 @@ fun QuestionnaireScreen(
                 )
                 BigTouchButton(
                     text = if (uiState.isLastQuestion) "Finalizar" else "Siguiente",
+                    enabled = uiState.canAdvance,
                     onClick = { if (uiState.isLastQuestion) viewModel.requestSubmit() else viewModel.nextQuestion() },
                     modifier = Modifier.weight(1f)
                 )

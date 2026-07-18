@@ -1,15 +1,18 @@
 package com.example.todoaccesible
 
 import android.content.Context
-import androidx.room.Room
-import com.example.todoaccesible.data.local.AppDatabase
+import com.example.todoaccesible.data.local.entities.UserEntity
+import com.example.todoaccesible.data.local.memory.InMemoryTable
+import com.example.todoaccesible.data.preferences.ActiveSessionRegistry
 import com.example.todoaccesible.data.preferences.SessionManager
 import com.example.todoaccesible.data.repository.AuthRepository
+import com.example.todoaccesible.data.repository.DiagnosticHistoryRepository
 import com.example.todoaccesible.data.repository.DiagnosticRepository
 import com.example.todoaccesible.data.repository.NotificationRepository
 import com.example.todoaccesible.data.repository.QuestionCatalogRepository
 import com.example.todoaccesible.data.repository.UserRepository
 import com.example.todoaccesible.data.repository.impl.AuthRepositoryImpl
+import com.example.todoaccesible.data.repository.impl.DiagnosticHistoryRepositoryImpl
 import com.example.todoaccesible.data.repository.impl.DiagnosticRepositoryImpl
 import com.example.todoaccesible.data.repository.impl.NotificationRepositoryImpl
 import com.example.todoaccesible.data.repository.impl.QuestionCatalogRepositoryImpl
@@ -17,35 +20,30 @@ import com.example.todoaccesible.data.repository.impl.UserRepositoryImpl
 
 /**
  * Contenedor de dependencias manual (sin Hilt/Koin) — la app es lo bastante
- * chica para que un grafo explícito sea más fácil de seguir. Todos los
- * repositorios son interfaces con una única implementación Room-backed; el
- * día que exista backend, se agrega una fuente remota y se cambia solo el
- * constructor de cada `impl`, sin tocar ViewModels ni pantallas.
+ * chica para que un grafo explícito sea más fácil de seguir. No hay base de
+ * datos ni backend: cada repositorio guarda su información en memoria
+ * (`InMemoryTable`), sembrada con valores por defecto (catálogo de preguntas,
+ * cuenta admin) al construirse. Todo se reinicia al cerrar la app.
  */
 class AppContainer(context: Context) {
-    private val database = Room.databaseBuilder(
-        context.applicationContext,
-        AppDatabase::class.java,
-        AppDatabase.NAME
-    ).fallbackToDestructiveMigration().build()
-
     val sessionManager = SessionManager(context.applicationContext)
+    val activeSessionRegistry = ActiveSessionRegistry()
 
-    val questionCatalogRepository: QuestionCatalogRepository =
-        QuestionCatalogRepositoryImpl(database.questionCatalogDao())
+    private val usersTable = InMemoryTable<UserEntity>(UserRepositoryImpl.defaultUsers())
 
-    val notificationRepository: NotificationRepository =
-        NotificationRepositoryImpl(database.notificationDao())
+    val questionCatalogRepository: QuestionCatalogRepository = QuestionCatalogRepositoryImpl()
 
-    val userRepository: UserRepository = UserRepositoryImpl(database.userDao())
+    val notificationRepository: NotificationRepository = NotificationRepositoryImpl()
 
-    val authRepository: AuthRepository = AuthRepositoryImpl(database.userDao(), sessionManager)
+    val userRepository: UserRepository = UserRepositoryImpl(usersTable)
+
+    val authRepository: AuthRepository = AuthRepositoryImpl(usersTable, sessionManager, activeSessionRegistry)
+
+    val diagnosticHistoryRepository: DiagnosticHistoryRepository = DiagnosticHistoryRepositoryImpl()
 
     val diagnosticRepository: DiagnosticRepository = DiagnosticRepositoryImpl(
-        diagnosticDao = database.diagnosticDao(),
-        answerDao = database.answerDao(),
-        photoDao = database.photoDao(),
         questionCatalogRepository = questionCatalogRepository,
-        notificationRepository = notificationRepository
+        notificationRepository = notificationRepository,
+        diagnosticHistoryRepository = diagnosticHistoryRepository
     )
 }

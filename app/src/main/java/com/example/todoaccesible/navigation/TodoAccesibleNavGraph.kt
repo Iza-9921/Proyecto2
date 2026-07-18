@@ -156,7 +156,16 @@ fun TodoAccesibleNavGraph(
         ) { backStackEntry ->
             val diagnosticId = backStackEntry.arguments?.getLong(Routes.ARG_DIAGNOSTIC_ID) ?: return@composable
             val viewModel: DiagnosticDetailViewModel = viewModel(
-                factory = viewModelFactory { initializer { DiagnosticDetailViewModel(diagnosticId, container.diagnosticRepository) } }
+                factory = viewModelFactory {
+                    initializer {
+                        DiagnosticDetailViewModel(
+                            diagnosticId,
+                            container.diagnosticRepository,
+                            container.diagnosticHistoryRepository,
+                            container.userRepository
+                        )
+                    }
+                }
             )
             DiagnosticDetailScreen(
                 viewModel = viewModel,
@@ -183,7 +192,9 @@ fun TodoAccesibleNavGraph(
 
         composable(Routes.AdminUsers.route) {
             val viewModel: UserManagementViewModel = viewModel(
-                factory = viewModelFactory { initializer { UserManagementViewModel(container.userRepository) } }
+                factory = viewModelFactory {
+                    initializer { UserManagementViewModel(container.userRepository, container.activeSessionRegistry) }
+                }
             )
             AdminShell(navController, currentRoute) {
                 UserManagementScreen(viewModel = viewModel)
@@ -216,10 +227,18 @@ fun TodoAccesibleNavGraph(
             arguments = listOf(navArgument(Routes.ARG_DIAGNOSTIC_ID) { type = NavType.LongType })
         ) { backStackEntry ->
             val diagnosticId = backStackEntry.arguments?.getLong(Routes.ARG_DIAGNOSTIC_ID) ?: return@composable
+            val reviewerId = session?.userId ?: return@composable
             val viewModel: AdminReviewViewModel = viewModel(
                 factory = viewModelFactory {
                     initializer {
-                        AdminReviewViewModel(diagnosticId, container.diagnosticRepository, container.questionCatalogRepository)
+                        AdminReviewViewModel(
+                            diagnosticId,
+                            reviewerId,
+                            container.diagnosticRepository,
+                            container.questionCatalogRepository,
+                            container.diagnosticHistoryRepository,
+                            container.userRepository
+                        )
                     }
                 }
             )

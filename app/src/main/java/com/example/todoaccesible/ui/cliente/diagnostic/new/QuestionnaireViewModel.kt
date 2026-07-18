@@ -37,6 +37,9 @@ data class QuestionnaireUiState(
 ) {
     val isFirstQuestion: Boolean get() = currentIndex == 0
     val isLastQuestion: Boolean get() = currentIndex == totalQuestions - 1
+
+    /** No se puede pasar a la siguiente pregunta (ni finalizar) sin responder la actual. */
+    val canAdvance: Boolean get() = currentAnswerValue != null
 }
 
 class QuestionnaireViewModel(
@@ -139,7 +142,17 @@ class QuestionnaireViewModel(
         _photoPendingDelete.value = null
     }
 
+    /** Primera pregunta sin responder (en orden de catálogo), o la última si ya todas tienen respuesta. */
+    private fun maxUnlockedIndex(): Int {
+        val questions = _questions.value
+        val answers = answersByCode.value
+        var idx = 0
+        while (idx < questions.size - 1 && answers[questions[idx].codigo]?.valor != null) idx++
+        return idx
+    }
+
     fun nextQuestion() {
+        if (currentQA.value.answer?.valor == null) return
         if (_currentIndex.value < _questions.value.size - 1) _currentIndex.value++
     }
 
@@ -147,12 +160,16 @@ class QuestionnaireViewModel(
         if (_currentIndex.value > 0) _currentIndex.value--
     }
 
+    /** Salta a la sección, pero nunca más allá de la primera pregunta sin responder (no se puede saltar preguntas). */
     fun jumpToSection(sectionId: String) {
         val index = _questions.value.indexOfFirst { it.seccionId == sectionId }
-        if (index >= 0) _currentIndex.value = index
+        if (index >= 0) _currentIndex.value = index.coerceAtMost(maxUnlockedIndex())
     }
 
-    fun requestSubmit() { _showSubmitConfirm.value = true }
+    fun requestSubmit() {
+        if (currentQA.value.answer?.valor == null) return
+        _showSubmitConfirm.value = true
+    }
     fun dismissSubmit() { _showSubmitConfirm.value = false }
 
     fun confirmSubmit(onSubmitted: () -> Unit) {

@@ -1,31 +1,29 @@
 package com.example.todoaccesible.data.repository.impl
 
-import com.example.todoaccesible.data.local.dao.QuestionCatalogDao
+import com.example.todoaccesible.data.local.entities.QuestionEntity
+import com.example.todoaccesible.data.local.entities.SectionEntity
+import com.example.todoaccesible.data.local.memory.InMemoryTable
 import com.example.todoaccesible.data.local.seed.QuestionCatalogSeeder
 import com.example.todoaccesible.data.repository.QuestionCatalogRepository
 
+/** Catálogo sembrado por defecto al construirse (no hay backend ni base de datos). */
 class QuestionCatalogRepositoryImpl(
-    private val dao: QuestionCatalogDao
+    private val sections: InMemoryTable<SectionEntity> = InMemoryTable(QuestionCatalogSeeder.sectionEntities()),
+    private val questions: InMemoryTable<QuestionEntity> = InMemoryTable(QuestionCatalogSeeder.questionEntities())
 ) : QuestionCatalogRepository {
 
-    override suspend fun ensureSeeded() {
-        if (dao.sectionCount() == 0) {
-            dao.insertSections(QuestionCatalogSeeder.sectionEntities())
-            dao.insertQuestions(QuestionCatalogSeeder.questionEntities())
-        }
-    }
+    override fun observeSections() = sections.flow
 
-    override fun observeSections() = dao.observeSections()
+    override suspend fun getAllSections() = sections.snapshot.sortedBy { it.orden }
 
-    override suspend fun getAllSections() = dao.getAllSections()
+    override fun observeQuestions() = questions.flow
 
-    override fun observeQuestions() = dao.observeQuestions()
+    override suspend fun getAllQuestions() = questions.snapshot.sortedBy { it.orden }
 
-    override suspend fun getAllQuestions() = dao.getAllQuestions()
+    override suspend fun getQuestionsForSection(sectionId: String) =
+        questions.snapshot.filter { it.seccionId == sectionId }.sortedBy { it.orden }
 
-    override suspend fun getQuestionsForSection(sectionId: String) = dao.getQuestionsForSection(sectionId)
-
-    override suspend fun updateQuestion(question: com.example.todoaccesible.data.local.entities.QuestionEntity) {
-        dao.updateQuestion(question)
+    override suspend fun updateQuestion(question: QuestionEntity) {
+        questions.mutate { list -> list.map { if (it.codigo == question.codigo) question else it } }
     }
 }

@@ -5,7 +5,6 @@ import com.example.todoaccesible.data.local.entities.SectionEntity
 import kotlinx.coroutines.flow.Flow
 
 interface QuestionCatalogRepository {
-    suspend fun ensureSeeded()
     fun observeSections(): Flow<List<SectionEntity>>
     suspend fun getAllSections(): List<SectionEntity>
     fun observeQuestions(): Flow<List<QuestionEntity>>

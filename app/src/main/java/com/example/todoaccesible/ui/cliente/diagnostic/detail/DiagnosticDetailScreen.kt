@@ -10,12 +10,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -24,6 +26,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.example.todoaccesible.core.designsystem.BigTouchButton
+import com.example.todoaccesible.core.designsystem.DiagnosticHistorySection
 import com.example.todoaccesible.core.designsystem.DiagnosticStatusChip
 import com.example.todoaccesible.core.designsystem.ScorecardHeaderCard
 import com.example.todoaccesible.core.designsystem.SectionScoreRow
@@ -83,11 +87,31 @@ fun DiagnosticDetailScreen(
                 )
             }
             item {
+                BigTouchButton(
+                    text = "Descargar PDF",
+                    onClick = { viewModel.exportPdf(context) }
+                )
+            }
+            item {
                 Text("Detalle por sección", style = MaterialTheme.typography.titleMedium)
             }
             items(scorecard.sections, key = { it.seccionId }) { section ->
                 SectionScoreRow(section = section)
             }
+            if (uiState.history.isNotEmpty()) {
+                item { DiagnosticHistorySection(entries = uiState.history) }
+            }
         }
+    }
+
+    uiState.exportError?.let { message ->
+        AlertDialog(
+            onDismissRequest = viewModel::dismissExportError,
+            title = { Text("Cuestionario incompleto") },
+            text = { Text(message) },
+            confirmButton = {
+                TextButton(onClick = viewModel::dismissExportError) { Text("Entendido") }
+            }
+        )
     }
 }

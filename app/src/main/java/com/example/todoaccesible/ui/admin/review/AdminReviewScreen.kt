@@ -44,11 +44,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import coil.compose.AsyncImage
 import com.example.todoaccesible.core.designsystem.AnswerValueChip
 import com.example.todoaccesible.core.designsystem.Chip
+import com.example.todoaccesible.core.designsystem.DiagnosticHistorySection
 import com.example.todoaccesible.core.theme.PlusFuchsia
 import com.example.todoaccesible.core.theme.RequiredNavy
 import com.example.todoaccesible.data.model.AnswerValue
 import com.example.todoaccesible.data.model.Credito
 import com.example.todoaccesible.data.model.DiagnosticStatus
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 @Composable
 fun AdminReviewScreen(
@@ -56,6 +59,7 @@ fun AdminReviewScreen(
     onNavigateBack: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val exportError by viewModel.exportError.collectAsState()
     var expandedPhotoUrl by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
 
@@ -79,18 +83,26 @@ fun AdminReviewScreen(
             )
         },
         bottomBar = {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(12.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                TextButton(onClick = { viewModel.setStatus(DiagnosticStatus.RECHAZADO) }, modifier = Modifier.weight(1f)) {
-                    Text("Rechazar")
-                }
-                TextButton(onClick = { viewModel.setStatus(DiagnosticStatus.INFO_REQUERIDA) }, modifier = Modifier.weight(1f)) {
-                    Text("Solicitar info")
-                }
-                TextButton(onClick = { viewModel.setStatus(DiagnosticStatus.VALIDADO) }, modifier = Modifier.weight(1f)) {
-                    Text("Aprobar")
+            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
+                OutlinedTextField(
+                    value = uiState.comentario,
+                    onValueChange = viewModel::setComentario,
+                    label = { Text("Comentario para el cliente (opcional)") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    TextButton(onClick = { viewModel.setStatus(DiagnosticStatus.RECHAZADO) }, modifier = Modifier.weight(1f)) {
+                        Text("Rechazar")
+                    }
+                    TextButton(onClick = { viewModel.setStatus(DiagnosticStatus.INFO_REQUERIDA) }, modifier = Modifier.weight(1f)) {
+                        Text("Solicitar info")
+                    }
+                    TextButton(onClick = { viewModel.setStatus(DiagnosticStatus.VALIDADO) }, modifier = Modifier.weight(1f)) {
+                        Text("Aprobar")
+                    }
                 }
             }
         }
@@ -126,6 +138,9 @@ fun AdminReviewScreen(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                if (uiState.history.isNotEmpty()) {
+                    item { DiagnosticHistorySection(entries = uiState.history) }
+                }
                 items(uiState.filteredRows, key = { it.question.codigo }) { row ->
                     Card(modifier = Modifier.fillMaxWidth()) {
                         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -180,6 +195,17 @@ fun AdminReviewScreen(
                     contentScale = ContentScale.Fit,
                     modifier = Modifier.fillMaxWidth()
                 )
+            }
+        )
+    }
+
+    exportError?.let { message ->
+        AlertDialog(
+            onDismissRequest = viewModel::dismissExportError,
+            title = { Text("Cuestionario incompleto") },
+            text = { Text(message) },
+            confirmButton = {
+                TextButton(onClick = viewModel::dismissExportError) { Text("Entendido") }
             }
         )
     }

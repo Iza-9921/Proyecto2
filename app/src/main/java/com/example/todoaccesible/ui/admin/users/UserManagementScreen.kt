@@ -1,6 +1,7 @@
 package com.example.todoaccesible.ui.admin.users
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -23,6 +24,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -35,12 +37,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.todoaccesible.core.designsystem.BigTouchButton
+import com.example.todoaccesible.core.designsystem.Chip
+import com.example.todoaccesible.core.theme.EstadoAprobado
 import com.example.todoaccesible.data.local.entities.UserEntity
 import com.example.todoaccesible.data.model.Role
 
 @Composable
 fun UserManagementScreen(viewModel: UserManagementViewModel) {
     val users by viewModel.users.collectAsState()
+    val activeSessionUserIds by viewModel.activeSessionUserIds.collectAsState()
     val showCreateDialog by viewModel.showCreateDialog.collectAsState()
 
     Scaffold(
@@ -59,7 +64,10 @@ fun UserManagementScreen(viewModel: UserManagementViewModel) {
             items(users, key = { it.id }) { user ->
                 UserRow(
                     user = user,
+                    sessionActive = user.id in activeSessionUserIds,
                     onRoleChange = { viewModel.updateRole(user.id, it) },
+                    onLicenseToggle = { viewModel.setLicenseActive(user.id, it) },
+                    onForceCloseSession = { viewModel.forceCloseSession(user.id) },
                     onDelete = { viewModel.deleteUser(user.id) }
                 )
             }
@@ -72,30 +80,59 @@ fun UserManagementScreen(viewModel: UserManagementViewModel) {
 }
 
 @Composable
-private fun UserRow(user: UserEntity, onRoleChange: (Role) -> Unit, onDelete: () -> Unit) {
+private fun UserRow(
+    user: UserEntity,
+    sessionActive: Boolean,
+    onRoleChange: (Role) -> Unit,
+    onLicenseToggle: (Boolean) -> Unit,
+    onForceCloseSession: () -> Unit,
+    onDelete: () -> Unit
+) {
     var menuExpanded by remember { mutableStateOf(false) }
 
     Card(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.padding(16.dp).fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column {
-                Text(user.nombre, style = MaterialTheme.typography.titleMedium)
-                Text(user.email, style = MaterialTheme.typography.bodyMedium)
-            }
-            Row {
-                Box {
-                    TextButton(onClick = { menuExpanded = true }) {
-                        Text(if (user.rol == Role.ADMIN) "Admin" else "Cliente")
+        Column(modifier = Modifier.padding(16.dp).fillMaxWidth()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column {
+                    Text(user.nombre, style = MaterialTheme.typography.titleMedium)
+                    Text(user.email, style = MaterialTheme.typography.bodyMedium)
+                }
+                Row {
+                    Box {
+                        TextButton(onClick = { menuExpanded = true }) {
+                            Text(if (user.rol == Role.ADMIN) "Admin" else "Cliente")
+                        }
+                        DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+                            DropdownMenuItem(text = { Text("Cliente") }, onClick = { onRoleChange(Role.CLIENTE); menuExpanded = false })
+                            DropdownMenuItem(text = { Text("Admin") }, onClick = { onRoleChange(Role.ADMIN); menuExpanded = false })
+                        }
                     }
-                    DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
-                        DropdownMenuItem(text = { Text("Cliente") }, onClick = { onRoleChange(Role.CLIENTE); menuExpanded = false })
-                        DropdownMenuItem(text = { Text("Admin") }, onClick = { onRoleChange(Role.ADMIN); menuExpanded = false })
+                    IconButton(onClick = onDelete) {
+                        Icon(Icons.Filled.Delete, contentDescription = "Eliminar usuario")
                     }
                 }
-                IconButton(onClick = onDelete) {
-                    Icon(Icons.Filled.Delete, contentDescription = "Eliminar usuario")
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row {
+                    Text("Licencia activa", style = MaterialTheme.typography.bodyMedium)
+                    Switch(
+                        checked = user.licenseActive,
+                        onCheckedChange = onLicenseToggle,
+                        modifier = Modifier.padding(start = 8.dp)
+                    )
+                }
+                if (sessionActive) {
+                    Chip(
+                        label = "Sesión activa (toca para forzar cierre)",
+                        color = EstadoAprobado,
+                        modifier = Modifier.clickable(onClick = onForceCloseSession)
+                    )
                 }
             }
         }

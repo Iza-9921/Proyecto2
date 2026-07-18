@@ -9,10 +9,9 @@ interface UserRepository {
     suspend fun create(nombre: String, email: String, password: String, rol: Role): Result<Long>
     suspend fun updateRole(userId: Long, rol: Role)
     suspend fun updateNombre(userId: Long, nombre: String)
-    suspend fun delete(userId: Long)
 
-    /** Siembra `admin@todoaccesible.mx` la primera vez que se abre la app, ya
-     * que el registro público solo crea rol CLIENTE y no hay backend que
-     * provea una cuenta admin. */
-    suspend fun ensureDefaultAdminSeeded()
+    /** RF-03: activa/desactiva la licencia de un usuario; con licencia inactiva no puede iniciar sesión. */
+    suspend fun setLicenseActive(userId: Long, active: Boolean)
+
+    suspend fun delete(userId: Long)
 }

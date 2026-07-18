@@ -31,6 +31,9 @@ interface DiagnosticRepository {
     /** Recalcula el scorecard con `ScorecardCalculator` y lo cachea en la entidad. */
     suspend fun recalculateScore(diagnosticId: Long): ScorecardResult?
 
+    /** Cuántas de las preguntas del catálogo aún no tienen respuesta. 0 = cuestionario completo. */
+    suspend fun countUnanswered(diagnosticId: Long): Int
+
     suspend fun submit(diagnosticId: Long)
     suspend fun discardDraft(diagnosticId: Long)
 
@@ -39,6 +42,11 @@ interface DiagnosticRepository {
     fun observeById(id: Long): Flow<DiagnosticEntity?>
     suspend fun getById(id: Long): DiagnosticEntity?
 
-    /** Cambia el estado (usado por admin) y notifica al cliente dueño del diagnóstico. */
-    suspend fun updateStatus(id: Long, status: DiagnosticStatus)
+    /**
+     * Cambia el estado (usado por admin), notifica al cliente dueño del
+     * diagnóstico y registra la acción en el historial (RF-20). [reviewerId]
+     * es el id del admin que revisa; [comentario] es opcional (razón del
+     * rechazo, qué información falta, etc.).
+     */
+    suspend fun updateStatus(id: Long, status: DiagnosticStatus, reviewerId: Long?, comentario: String = "")
 }

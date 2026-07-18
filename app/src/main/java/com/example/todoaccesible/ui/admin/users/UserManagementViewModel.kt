@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.todoaccesible.data.local.entities.UserEntity
 import com.example.todoaccesible.data.model.Role
+import com.example.todoaccesible.data.preferences.ActiveSessionRegistry
 import com.example.todoaccesible.data.repository.UserRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -18,10 +19,17 @@ data class NewUserForm(
     val rol: Role = Role.CLIENTE
 )
 
-class UserManagementViewModel(private val userRepository: UserRepository) : ViewModel() {
+class UserManagementViewModel(
+    private val userRepository: UserRepository,
+    private val activeSessionRegistry: ActiveSessionRegistry
+) : ViewModel() {
 
     val users: StateFlow<List<UserEntity>> = userRepository.observeAll()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** RF-18: qué usuarios tienen una sesión activa ahora mismo, para que el admin las supervise. */
+    val activeSessionUserIds: StateFlow<Set<Long>> = activeSessionRegistry.observeActiveUserIds()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
 
     private val _form = MutableStateFlow(NewUserForm())
     val form: StateFlow<NewUserForm> = _form
@@ -55,6 +63,16 @@ class UserManagementViewModel(private val userRepository: UserRepository) : View
 
     fun updateRole(userId: Long, rol: Role) {
         viewModelScope.launch { userRepository.updateRole(userId, rol) }
+    }
+
+    /** RF-03: activa/desactiva la licencia; con licencia inactiva el usuario no puede iniciar sesión. */
+    fun setLicenseActive(userId: Long, active: Boolean) {
+        viewModelScope.launch { userRepository.setLicenseActive(userId, active) }
+    }
+
+    /** RF-18: el admin fuerza el cierre de una sesión activa (p.ej. si quedó colgada). */
+    fun forceCloseSession(userId: Long) {
+        activeSessionRegistry.markInactive(userId)
     }
 
     fun deleteUser(userId: Long) {

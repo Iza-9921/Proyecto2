@@ -52,6 +52,8 @@ class RegisterViewModel(private val authRepository: AuthRepository) : ViewModel(
                 is AuthResult.Error -> {
                     _uiState.value = _uiState.value.copy(loading = false, error = result.message)
                 }
+                // register() nunca produce conflicto de sesión (RF-18 solo aplica a login).
+                is AuthResult.SessionConflict -> Unit
             }
         }
     }

@@ -1,13 +1,10 @@
 package com.example.todoaccesible.data.local.entities
 
-import androidx.room.Entity
-import androidx.room.PrimaryKey
 import com.example.todoaccesible.data.model.DiagnosticStatus
 import com.example.todoaccesible.data.model.Nivel
 
-@Entity(tableName = "diagnostics")
 data class DiagnosticEntity(
-    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val id: Long = 0,
     val clienteId: Long,
     val projectName: String,
     val ubicacion: String,

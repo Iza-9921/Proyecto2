@@ -25,6 +25,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.example.todoaccesible.R
 import com.example.todoaccesible.core.designsystem.BigTouchButton
+import com.example.todoaccesible.core.designsystem.ConfirmDialog
 import com.example.todoaccesible.data.model.Role
 
 @Composable
@@ -89,5 +90,15 @@ fun LoginScreen(
         TextButton(onClick = onNavigateToRegister, modifier = Modifier.padding(top = 8.dp)) {
             Text("¿No tienes cuenta? Regístrate")
         }
+    }
+
+    if (uiState.sessionConflict) {
+        ConfirmDialog(
+            title = "Sesión activa en otro dispositivo",
+            message = "Ya hay una sesión activa con esta cuenta. ¿Deseas cerrarla e iniciar sesión aquí?",
+            confirmLabel = "Cerrar e ingresar",
+            onConfirm = { viewModel.confirmForceLogin(onLoginSuccess) },
+            onDismiss = viewModel::dismissSessionConflict
+        )
     }
 }
