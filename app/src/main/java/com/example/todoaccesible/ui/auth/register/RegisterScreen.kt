@@ -2,6 +2,7 @@ package com.example.todoaccesible.ui.auth.register
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -21,17 +22,19 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.example.todoaccesible.core.designsystem.BigTouchButton
+import com.example.todoaccesible.core.designsystem.BigTouchOutlinedButton
+import com.example.todoaccesible.core.designsystem.EmpresaInfoFields
 
 @Composable
 fun RegisterScreen(
     viewModel: RegisterViewModel,
     onNavigateBack: () -> Unit,
-    onRegisterSuccess: () -> Unit
+    onRegisterSuccess: (diagnosticId: Long) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
     Column(modifier = Modifier.fillMaxSize()) {
-        TopAppBar(title = { Text("Crear cuenta") })
+        TopAppBar(title = { Text(if (uiState.step == 1) "Crear cuenta · Paso 1 de 2" else "Registro de la empresa · Paso 2 de 2") })
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -39,52 +42,101 @@ fun RegisterScreen(
                 .padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            OutlinedTextField(
-                value = uiState.nombre,
-                onValueChange = viewModel::onNombreChange,
-                label = { Text("Nombre completo") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-            OutlinedTextField(
-                value = uiState.email,
-                onValueChange = viewModel::onEmailChange,
-                label = { Text("Correo electrónico") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                modifier = Modifier.fillMaxWidth()
-            )
-            OutlinedTextField(
-                value = uiState.password,
-                onValueChange = viewModel::onPasswordChange,
-                label = { Text("Contraseña") },
-                singleLine = true,
-                visualTransformation = PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                modifier = Modifier.fillMaxWidth()
-            )
-            OutlinedTextField(
-                value = uiState.confirmPassword,
-                onValueChange = viewModel::onConfirmPasswordChange,
-                label = { Text("Confirmar contraseña") },
-                singleLine = true,
-                visualTransformation = PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                modifier = Modifier.fillMaxWidth()
-            )
+            if (uiState.step == 1) {
+                OutlinedTextField(
+                    value = uiState.nombre,
+                    onValueChange = viewModel::onNombreChange,
+                    label = { Text("Nombre completo") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = uiState.email,
+                    onValueChange = viewModel::onEmailChange,
+                    label = { Text("Correo electrónico") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = uiState.password,
+                    onValueChange = viewModel::onPasswordChange,
+                    label = { Text("Contraseña") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = uiState.confirmPassword,
+                    onValueChange = viewModel::onConfirmPasswordChange,
+                    label = { Text("Confirmar contraseña") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    modifier = Modifier.fillMaxWidth()
+                )
 
-            if (uiState.error != null) {
-                Text(text = uiState.error ?: "", color = MaterialTheme.colorScheme.error)
-            }
+                if (uiState.error != null) {
+                    Text(text = uiState.error ?: "", color = MaterialTheme.colorScheme.error)
+                }
 
-            BigTouchButton(
-                text = if (uiState.loading) "Creando cuenta…" else "Crear cuenta",
-                enabled = !uiState.loading,
-                onClick = { viewModel.register(onRegisterSuccess) }
-            )
+                BigTouchButton(
+                    text = "Siguiente",
+                    onClick = viewModel::goToStep2
+                )
+                TextButton(onClick = onNavigateBack) {
+                    Text("Ya tengo cuenta, iniciar sesión")
+                }
+            } else {
+                Text(
+                    "Estos datos aparecen en la portada del scorecard.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                EmpresaInfoFields(
+                    projectName = uiState.projectName,
+                    onProjectNameChange = viewModel::onProjectNameChange,
+                    clienteNombre = uiState.clienteNombre,
+                    onClienteNombreChange = viewModel::onClienteNombreChange,
+                    telefono = uiState.telefono,
+                    onTelefonoChange = viewModel::onTelefonoChange,
+                    ubicacion = uiState.ubicacion,
+                    onUbicacionChange = viewModel::onUbicacionChange,
+                    entidadFederativa = uiState.entidadFederativa,
+                    onEntidadFederativaChange = viewModel::onEntidadFederativaChange,
+                    ciudad = uiState.ciudad,
+                    onCiudadChange = viewModel::onCiudadChange,
+                    tipoInmueble = uiState.tipoInmueble,
+                    onTipoInmuebleChange = viewModel::onTipoInmuebleChange,
+                    fechaEvaluacion = uiState.fechaEvaluacion,
+                    onFechaEvaluacionChange = viewModel::onFechaEvaluacionChange,
+                    responsable = uiState.responsable,
+                    onResponsableChange = viewModel::onResponsableChange,
+                    revision = uiState.revision,
+                    onRevisionChange = viewModel::onRevisionChange
+                )
 
-            TextButton(onClick = onNavigateBack) {
-                Text("Ya tengo cuenta, iniciar sesión")
+                if (uiState.error != null) {
+                    Text(text = uiState.error ?: "", color = MaterialTheme.colorScheme.error)
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    BigTouchOutlinedButton(
+                        text = "Atrás",
+                        enabled = !uiState.loading,
+                        onClick = viewModel::backToStep1,
+                        modifier = Modifier.weight(1f)
+                    )
+                    BigTouchButton(
+                        text = if (uiState.loading) "Registrando…" else "Registrarse",
+                        enabled = !uiState.loading && uiState.projectName.isNotBlank(),
+                        onClick = { viewModel.register(onRegisterSuccess) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
             }
         }
     }

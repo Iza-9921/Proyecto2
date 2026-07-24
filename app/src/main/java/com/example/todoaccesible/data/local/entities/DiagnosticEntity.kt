@@ -17,5 +17,12 @@ data class DiagnosticEntity(
     // guarda para listar rápido en dashboard/kanban sin recorrer respuestas.
     val nivel: Nivel? = null,
     val requeridoPct: Int? = null,
-    val plusPct: Int? = null
+    val plusPct: Int? = null,
+    // Datos ampliados del registro de la empresa/inmueble a evaluar.
+    val clienteNombre: String = "",
+    val telefono: String = "",
+    val entidadFederativa: String = "",
+    val ciudad: String = "",
+    val tipoInmueble: String = "",
+    val fechaEvaluacion: Long? = null
 )

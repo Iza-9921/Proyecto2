@@ -92,7 +92,7 @@ object ExcelDiagnosticGenerator {
         val dateStr = SimpleDateFormat("dd/MM/yyyy", Locale("es", "MX")).format(Date(diagnostic.fechaEnvio ?: diagnostic.fechaCreacion))
         val infoLines = listOf(
             "Proyecto: ${diagnostic.projectName}",
-            "Ubicación: ${diagnostic.ubicacion}",
+            "Dirección: ${diagnostic.ubicacion}",
             "Revisión: ${diagnostic.revision}",
             "Fecha: $dateStr",
             "Responsable: ${diagnostic.responsable}"

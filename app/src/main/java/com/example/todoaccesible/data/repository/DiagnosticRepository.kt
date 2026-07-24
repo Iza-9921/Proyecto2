@@ -17,7 +17,13 @@ interface DiagnosticRepository {
         projectName: String,
         ubicacion: String,
         responsable: String,
-        revision: String
+        revision: String,
+        clienteNombre: String = "",
+        telefono: String = "",
+        entidadFederativa: String = "",
+        ciudad: String = "",
+        tipoInmueble: String = "",
+        fechaEvaluacion: Long? = null
     )
 
     fun observeAnswers(diagnosticId: Long): Flow<List<AnswerEntity>>

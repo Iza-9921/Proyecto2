@@ -2,11 +2,17 @@ package com.example.todoaccesible.ui.cliente.diagnostic.new
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -16,6 +22,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.todoaccesible.core.designsystem.BigTouchButton
+import com.example.todoaccesible.core.designsystem.BigTouchOutlinedButton
+import com.example.todoaccesible.core.designsystem.EmpresaInfoFields
 
 @Composable
 fun ProjectInfoScreen(
@@ -25,11 +33,23 @@ fun ProjectInfoScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
-    Scaffold(topBar = { TopAppBar(title = { Text("Datos del proyecto") }) }) { innerPadding ->
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Registro de la empresa") },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(Icons.Filled.ArrowBack, contentDescription = "Regresar")
+                    }
+                }
+            )
+        }
+    ) { innerPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
+                .verticalScroll(rememberScrollState())
                 .padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -37,41 +57,45 @@ fun ProjectInfoScreen(
                 "Estos datos aparecen en la portada del scorecard.",
                 style = MaterialTheme.typography.bodyMedium
             )
-            OutlinedTextField(
-                value = uiState.projectName,
-                onValueChange = viewModel::onProjectNameChange,
-                label = { Text("Nombre del proyecto") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-            OutlinedTextField(
-                value = uiState.ubicacion,
-                onValueChange = viewModel::onUbicacionChange,
-                label = { Text("Ubicación") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-            OutlinedTextField(
-                value = uiState.responsable,
-                onValueChange = viewModel::onResponsableChange,
-                label = { Text("Responsable") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-            OutlinedTextField(
-                value = uiState.revision,
-                onValueChange = viewModel::onRevisionChange,
-                label = { Text("Revisión") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
+            EmpresaInfoFields(
+                projectName = uiState.projectName,
+                onProjectNameChange = viewModel::onProjectNameChange,
+                clienteNombre = uiState.clienteNombre,
+                onClienteNombreChange = viewModel::onClienteNombreChange,
+                telefono = uiState.telefono,
+                onTelefonoChange = viewModel::onTelefonoChange,
+                ubicacion = uiState.ubicacion,
+                onUbicacionChange = viewModel::onUbicacionChange,
+                entidadFederativa = uiState.entidadFederativa,
+                onEntidadFederativaChange = viewModel::onEntidadFederativaChange,
+                ciudad = uiState.ciudad,
+                onCiudadChange = viewModel::onCiudadChange,
+                tipoInmueble = uiState.tipoInmueble,
+                onTipoInmuebleChange = viewModel::onTipoInmuebleChange,
+                fechaEvaluacion = uiState.fechaEvaluacion,
+                onFechaEvaluacionChange = viewModel::onFechaEvaluacionChange,
+                responsable = uiState.responsable,
+                onResponsableChange = viewModel::onResponsableChange,
+                revision = uiState.revision,
+                onRevisionChange = viewModel::onRevisionChange
             )
 
-            BigTouchButton(
-                text = "Comenzar cuestionario",
-                enabled = !uiState.loading && uiState.projectName.isNotBlank(),
-                onClick = { viewModel.continueToQuestionnaire(onContinue) },
-                modifier = Modifier.padding(top = 12.dp)
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                BigTouchOutlinedButton(
+                    text = "Atrás",
+                    onClick = onNavigateBack,
+                    modifier = Modifier.weight(1f)
+                )
+                BigTouchButton(
+                    text = "Comenzar cuestionario",
+                    enabled = !uiState.loading && uiState.projectName.isNotBlank(),
+                    onClick = { viewModel.continueToQuestionnaire(onContinue) },
+                    modifier = Modifier.weight(1f)
+                )
+            }
         }
     }
 }

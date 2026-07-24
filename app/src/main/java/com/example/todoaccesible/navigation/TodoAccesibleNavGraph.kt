@@ -83,13 +83,15 @@ fun TodoAccesibleNavGraph(
 
         composable(Routes.Register.route) {
             val viewModel: RegisterViewModel = viewModel(
-                factory = viewModelFactory { initializer { RegisterViewModel(container.authRepository) } }
+                factory = viewModelFactory {
+                    initializer { RegisterViewModel(container.authRepository, container.diagnosticRepository) }
+                }
             )
             RegisterScreen(
                 viewModel = viewModel,
                 onNavigateBack = { navController.popBackStack() },
-                onRegisterSuccess = {
-                    navController.navigate(Routes.ClienteDashboard.route) { popUpTo(0) }
+                onRegisterSuccess = { diagnosticId ->
+                    navController.navigate(Routes.Questionnaire.build(diagnosticId)) { popUpTo(0) }
                 }
             )
         }

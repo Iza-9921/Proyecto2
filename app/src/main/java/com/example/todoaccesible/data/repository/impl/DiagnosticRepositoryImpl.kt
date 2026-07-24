@@ -51,7 +51,7 @@ class DiagnosticRepositoryImpl(
                 id = 1,
                 clienteId = UserRepositoryImpl.DEMO_CLIENT_ID,
                 projectName = "Edificio Demo Todo Accesible",
-                ubicacion = "Ciudad de México",
+                ubicacion = "Av. Principal 1234",
                 responsable = "Cliente Demo",
                 revision = "1",
                 fechaCreacion = System.currentTimeMillis(),
@@ -59,7 +59,13 @@ class DiagnosticRepositoryImpl(
                 estado = DiagnosticStatus.VALIDADO,
                 nivel = result.nivel,
                 requeridoPct = result.required.pct,
-                plusPct = result.plus.pct
+                plusPct = result.plus.pct,
+                clienteNombre = "Cliente Demo",
+                telefono = "55 1234 5678",
+                entidadFederativa = "Ciudad de México",
+                ciudad = "Ciudad de México",
+                tipoInmueble = "Edificio de oficinas",
+                fechaEvaluacion = System.currentTimeMillis()
             )
             val demoAnswers = questions.mapIndexed { index, question ->
                 AnswerEntity(
@@ -96,12 +102,29 @@ class DiagnosticRepositoryImpl(
         projectName: String,
         ubicacion: String,
         responsable: String,
-        revision: String
+        revision: String,
+        clienteNombre: String,
+        telefono: String,
+        entidadFederativa: String,
+        ciudad: String,
+        tipoInmueble: String,
+        fechaEvaluacion: Long?
     ) {
         diagnostics.mutate { list ->
             list.map {
                 if (it.id == diagnosticId) {
-                    it.copy(projectName = projectName, ubicacion = ubicacion, responsable = responsable, revision = revision)
+                    it.copy(
+                        projectName = projectName,
+                        ubicacion = ubicacion,
+                        responsable = responsable,
+                        revision = revision,
+                        clienteNombre = clienteNombre,
+                        telefono = telefono,
+                        entidadFederativa = entidadFederativa,
+                        ciudad = ciudad,
+                        tipoInmueble = tipoInmueble,
+                        fechaEvaluacion = fechaEvaluacion
+                    )
                 } else it
             }
         }
