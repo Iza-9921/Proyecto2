@@ -113,7 +113,8 @@ fun RegisterScreen(
                     responsable = uiState.responsable,
                     onResponsableChange = viewModel::onResponsableChange,
                     revision = uiState.revision,
-                    onRevisionChange = viewModel::onRevisionChange
+                    onRevisionChange = viewModel::onRevisionChange,
+                    showRevision = false
                 )
 
                 if (uiState.error != null) {

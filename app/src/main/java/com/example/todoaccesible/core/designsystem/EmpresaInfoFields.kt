@@ -66,7 +66,8 @@ fun EmpresaInfoFields(
     onResponsableChange: (String) -> Unit,
     revision: String,
     onRevisionChange: (String) -> Unit,
-    projectNameLabel: String = "Nombre de la empresa"
+    projectNameLabel: String = "Nombre de la empresa",
+    showRevision: Boolean = true
 ) {
     var showDatePicker by remember { mutableStateOf(false) }
 
@@ -152,13 +153,15 @@ fun EmpresaInfoFields(
         singleLine = true,
         modifier = Modifier.fillMaxWidth()
     )
-    OutlinedTextField(
-        value = revision,
-        onValueChange = onRevisionChange,
-        label = { Text("Revisión") },
-        singleLine = true,
-        modifier = Modifier.fillMaxWidth()
-    )
+    if (showRevision) {
+        OutlinedTextField(
+            value = revision,
+            onValueChange = onRevisionChange,
+            label = { Text("Revisión") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
 
     if (showDatePicker) {
         val datePickerState = rememberDatePickerState(initialSelectedDateMillis = fechaEvaluacion)

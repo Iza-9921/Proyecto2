@@ -10,12 +10,14 @@ import com.example.todoaccesible.data.repository.DiagnosticHistoryRepository
 import com.example.todoaccesible.data.repository.DiagnosticRepository
 import com.example.todoaccesible.data.repository.NotificationRepository
 import com.example.todoaccesible.data.repository.QuestionCatalogRepository
+import com.example.todoaccesible.data.repository.QuestionReviewRepository
 import com.example.todoaccesible.data.repository.UserRepository
 import com.example.todoaccesible.data.repository.impl.AuthRepositoryImpl
 import com.example.todoaccesible.data.repository.impl.DiagnosticHistoryRepositoryImpl
 import com.example.todoaccesible.data.repository.impl.DiagnosticRepositoryImpl
 import com.example.todoaccesible.data.repository.impl.NotificationRepositoryImpl
 import com.example.todoaccesible.data.repository.impl.QuestionCatalogRepositoryImpl
+import com.example.todoaccesible.data.repository.impl.QuestionReviewRepositoryImpl
 import com.example.todoaccesible.data.repository.impl.UserRepositoryImpl
 
 /**
@@ -40,6 +42,8 @@ class AppContainer(context: Context) {
     val authRepository: AuthRepository = AuthRepositoryImpl(usersTable, sessionManager, activeSessionRegistry)
 
     val diagnosticHistoryRepository: DiagnosticHistoryRepository = DiagnosticHistoryRepositoryImpl()
+
+    val questionReviewRepository: QuestionReviewRepository = QuestionReviewRepositoryImpl()
 
     val diagnosticRepository: DiagnosticRepository = DiagnosticRepositoryImpl(
         questionCatalogRepository = questionCatalogRepository,

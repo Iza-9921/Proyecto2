@@ -239,7 +239,8 @@ fun TodoAccesibleNavGraph(
                             container.diagnosticRepository,
                             container.questionCatalogRepository,
                             container.diagnosticHistoryRepository,
-                            container.userRepository
+                            container.userRepository,
+                            container.questionReviewRepository
                         )
                     }
                 }

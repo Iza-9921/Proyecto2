@@ -24,6 +24,7 @@ val EstadoAprobado = Color(0xFF1E8E3E)
 val EstadoPendiente = Color(0xFFF29900)
 val EstadoNoCumple = Color(0xFFD93025)
 val EstadoNoAplica = Color(0xFF9AA0A6)
+val EstadoInfoRequerida = Color(0xFF1A73E8)
 
 val SurfaceLight = Color(0xFFFFFBFE)
 val SurfaceDark = Color(0xFF141218)
