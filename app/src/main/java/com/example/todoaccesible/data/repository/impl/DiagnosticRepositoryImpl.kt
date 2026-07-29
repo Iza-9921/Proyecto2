@@ -11,6 +11,7 @@ import com.example.todoaccesible.data.repository.DiagnosticHistoryRepository
 import com.example.todoaccesible.data.repository.DiagnosticRepository
 import com.example.todoaccesible.data.repository.NotificationRepository
 import com.example.todoaccesible.data.repository.QuestionCatalogRepository
+import com.example.todoaccesible.data.repository.UserRepository
 import com.example.todoaccesible.domain.scoring.ScorecardCalculator
 import com.example.todoaccesible.domain.scoring.ScorecardQuestion
 import com.example.todoaccesible.domain.scoring.ScorecardResult
@@ -22,7 +23,8 @@ class DiagnosticRepositoryImpl(
     private val photos: InMemoryTable<PhotoEntity> = InMemoryTable(),
     private val questionCatalogRepository: QuestionCatalogRepository,
     private val notificationRepository: NotificationRepository,
-    private val diagnosticHistoryRepository: DiagnosticHistoryRepository
+    private val diagnosticHistoryRepository: DiagnosticHistoryRepository,
+    private val userRepository: UserRepository
 ) : DiagnosticRepository {
 
     companion object {
@@ -217,6 +219,7 @@ class DiagnosticRepositoryImpl(
             reviewerId = null,
             comentario = "Enviado por el cliente para revisión"
         )
+        userRepository.decrementDiagnosticoDisponible(diagnostic.clienteId)
     }
 
     override suspend fun discardDraft(diagnosticId: Long) {

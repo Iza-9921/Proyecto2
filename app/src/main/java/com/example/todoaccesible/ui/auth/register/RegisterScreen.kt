@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -29,7 +30,8 @@ import com.example.todoaccesible.core.designsystem.EmpresaInfoFields
 fun RegisterScreen(
     viewModel: RegisterViewModel,
     onNavigateBack: () -> Unit,
-    onRegisterSuccess: (diagnosticId: Long) -> Unit
+    onRegisterSuccess: (diagnosticId: Long) -> Unit,
+    onQuotaBlockedAcknowledged: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
@@ -140,5 +142,19 @@ fun RegisterScreen(
                 }
             }
         }
+    }
+
+    if (uiState.quotaBlocked) {
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text("Sin diagnósticos disponibles") },
+            text = { Text("No cuentas con diagnósticos disponibles. Comunícate con la empresa para solicitar la asignación de nuevos diagnósticos.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.dismissQuotaBlocked()
+                    onQuotaBlockedAcknowledged()
+                }) { Text("Aceptar") }
+            }
+        )
     }
 }

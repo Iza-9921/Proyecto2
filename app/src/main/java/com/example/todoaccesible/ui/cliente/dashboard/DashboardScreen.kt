@@ -13,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Card
@@ -22,10 +23,14 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -47,6 +52,17 @@ fun DashboardScreen(
 ) {
     val diagnostics by viewModel.diagnostics.collectAsState()
     val unreadNotifications by viewModel.unreadNotifications.collectAsState()
+    val diagnosticosDisponibles by viewModel.diagnosticosDisponibles.collectAsState()
+    var showQuotaBlockedDialog by remember { mutableStateOf(false) }
+
+    fun requestNewDiagnostic() {
+        val hasDraft = diagnostics.any { it.estado == DiagnosticStatus.BORRADOR }
+        if (hasDraft || diagnosticosDisponibles == null || (diagnosticosDisponibles ?: 0) > 0) {
+            onNavigateToNewDiagnostic()
+        } else {
+            showQuotaBlockedDialog = true
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -67,45 +83,60 @@ fun DashboardScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = onNavigateToNewDiagnostic) {
+            FloatingActionButton(onClick = ::requestNewDiagnostic) {
                 Icon(Icons.Filled.Add, contentDescription = "Nuevo diagnóstico")
             }
         }
     ) { innerPadding ->
-        if (diagnostics.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    "Aún no tienes diagnósticos. Toca + para crear el primero.",
-                    modifier = Modifier.padding(24.dp)
-                )
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(diagnostics, key = { it.id }) { diagnostic ->
-                    DiagnosticCard(
-                        diagnostic = diagnostic,
-                        onClick = {
-                            if (diagnostic.estado == DiagnosticStatus.BORRADOR) {
-                                onNavigateToNewDiagnostic()
-                            } else {
-                                onNavigateToDetail(diagnostic.id)
-                            }
-                        }
+        Column(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+            Text(
+                text = "Diagnósticos disponibles: ${diagnosticosDisponibles?.toString() ?: "Ilimitados"}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
+            )
+            if (diagnostics.isEmpty()) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        "Aún no tienes diagnósticos. Toca + para crear el primero.",
+                        modifier = Modifier.padding(24.dp)
                     )
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(diagnostics, key = { it.id }) { diagnostic ->
+                        DiagnosticCard(
+                            diagnostic = diagnostic,
+                            onClick = {
+                                if (diagnostic.estado == DiagnosticStatus.BORRADOR) {
+                                    onNavigateToNewDiagnostic()
+                                } else {
+                                    onNavigateToDetail(diagnostic.id)
+                                }
+                            }
+                        )
+                    }
                 }
             }
         }
+    }
+
+    if (showQuotaBlockedDialog) {
+        AlertDialog(
+            onDismissRequest = { showQuotaBlockedDialog = false },
+            title = { Text("Sin diagnósticos disponibles") },
+            text = { Text("No cuentas con diagnósticos disponibles. Comunícate con la empresa para solicitar la asignación de nuevos diagnósticos.") },
+            confirmButton = {
+                TextButton(onClick = { showQuotaBlockedDialog = false }) { Text("Aceptar") }
+            }
+        )
     }
 }
 

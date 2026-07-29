@@ -4,6 +4,7 @@ import android.content.Context
 import com.example.todoaccesible.data.local.entities.UserEntity
 import com.example.todoaccesible.data.local.memory.InMemoryTable
 import com.example.todoaccesible.data.preferences.ActiveSessionRegistry
+import com.example.todoaccesible.data.preferences.DiagnosticQuotaStore
 import com.example.todoaccesible.data.preferences.SessionManager
 import com.example.todoaccesible.data.repository.AuthRepository
 import com.example.todoaccesible.data.repository.DiagnosticHistoryRepository
@@ -19,6 +20,9 @@ import com.example.todoaccesible.data.repository.impl.NotificationRepositoryImpl
 import com.example.todoaccesible.data.repository.impl.QuestionCatalogRepositoryImpl
 import com.example.todoaccesible.data.repository.impl.QuestionReviewRepositoryImpl
 import com.example.todoaccesible.data.repository.impl.UserRepositoryImpl
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 /**
  * Contenedor de dependencias manual (sin Hilt/Koin) — la app es lo bastante
@@ -32,12 +36,13 @@ class AppContainer(context: Context) {
     val activeSessionRegistry = ActiveSessionRegistry()
 
     private val usersTable = InMemoryTable<UserEntity>(UserRepositoryImpl.defaultUsers())
+    private val diagnosticQuotaStore = DiagnosticQuotaStore(context.applicationContext)
 
     val questionCatalogRepository: QuestionCatalogRepository = QuestionCatalogRepositoryImpl()
 
     val notificationRepository: NotificationRepository = NotificationRepositoryImpl()
 
-    val userRepository: UserRepository = UserRepositoryImpl(usersTable)
+    val userRepository: UserRepository = UserRepositoryImpl(usersTable, diagnosticQuotaStore)
 
     val authRepository: AuthRepository = AuthRepositoryImpl(usersTable, sessionManager, activeSessionRegistry)
 
@@ -48,6 +53,14 @@ class AppContainer(context: Context) {
     val diagnosticRepository: DiagnosticRepository = DiagnosticRepositoryImpl(
         questionCatalogRepository = questionCatalogRepository,
         notificationRepository = notificationRepository,
-        diagnosticHistoryRepository = diagnosticHistoryRepository
+        diagnosticHistoryRepository = diagnosticHistoryRepository,
+        userRepository = userRepository
     )
+
+    init {
+        // Cupo inicial de la cuenta cliente demo; no pisa una asignación ya guardada del admin.
+        CoroutineScope(Dispatchers.IO).launch {
+            diagnosticQuotaStore.seedIfAbsent(UserRepositoryImpl.DEMO_CLIENT_ID, 1)
+        }
+    }
 }

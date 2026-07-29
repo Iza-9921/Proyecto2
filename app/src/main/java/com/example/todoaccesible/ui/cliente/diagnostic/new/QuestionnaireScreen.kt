@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -45,6 +46,8 @@ fun QuestionnaireScreen(
     diagnosticId: Long
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val sectionCompletion by viewModel.sectionCompletion.collectAsState()
+    val submitBlockedMessage by viewModel.submitBlockedMessage.collectAsState()
 
     Scaffold(
         topBar = {
@@ -71,7 +74,8 @@ fun QuestionnaireScreen(
             SectionPills(
                 sections = uiState.sections,
                 currentSectionId = question.seccionId,
-                onSectionSelected = { viewModel.jumpToSection(it.id) }
+                onSectionSelected = { viewModel.jumpToSection(it.id) },
+                sectionCompletion = sectionCompletion
             )
 
             Column(
@@ -173,6 +177,17 @@ fun QuestionnaireScreen(
             isDestructive = true,
             onConfirm = viewModel::confirmDeletePhoto,
             onDismiss = viewModel::dismissDeletePhoto
+        )
+    }
+
+    submitBlockedMessage?.let { message ->
+        AlertDialog(
+            onDismissRequest = viewModel::dismissSubmitBlocked,
+            title = { Text("Preguntas pendientes") },
+            text = { Text(message) },
+            confirmButton = {
+                TextButton(onClick = viewModel::dismissSubmitBlocked) { Text("Entendido") }
+            }
         )
     }
 }

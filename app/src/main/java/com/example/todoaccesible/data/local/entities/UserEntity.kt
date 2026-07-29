@@ -8,5 +8,13 @@ data class UserEntity(
     val passwordHash: String,
     val nombre: String,
     val rol: Role,
-    val licenseActive: Boolean = true
+    val licenseActive: Boolean = true,
+    /**
+     * Cuántos diagnósticos nuevos puede iniciar este cliente; lo asigna el
+     * administrador manualmente (el pago se hace fuera de la app, de forma
+     * presencial). `null` = ilimitados. Por defecto 0: un cliente recién
+     * creado no puede iniciar ningún diagnóstico hasta que el administrador
+     * le asigne cupo.
+     */
+    val diagnosticosDisponibles: Int? = 0
 )

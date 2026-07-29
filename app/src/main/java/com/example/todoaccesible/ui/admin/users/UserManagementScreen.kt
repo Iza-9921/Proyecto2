@@ -68,7 +68,8 @@ fun UserManagementScreen(viewModel: UserManagementViewModel) {
                     onRoleChange = { viewModel.updateRole(user.id, it) },
                     onLicenseToggle = { viewModel.setLicenseActive(user.id, it) },
                     onForceCloseSession = { viewModel.forceCloseSession(user.id) },
-                    onDelete = { viewModel.deleteUser(user.id) }
+                    onDelete = { viewModel.deleteUser(user.id) },
+                    onDiagnosticosDisponiblesChange = { viewModel.setDiagnosticosDisponibles(user.id, it) }
                 )
             }
         }
@@ -86,7 +87,8 @@ private fun UserRow(
     onRoleChange: (Role) -> Unit,
     onLicenseToggle: (Boolean) -> Unit,
     onForceCloseSession: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onDiagnosticosDisponiblesChange: (Int?) -> Unit
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
 
@@ -133,6 +135,30 @@ private fun UserRow(
                         color = EstadoAprobado,
                         modifier = Modifier.clickable(onClick = onForceCloseSession)
                     )
+                }
+            }
+            if (user.rol == Role.CLIENTE) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                ) {
+                    Text("Diagnósticos disponibles", style = MaterialTheme.typography.bodyMedium)
+                    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                        val cantidadActual = user.diagnosticosDisponibles ?: 0
+                        TextButton(
+                            onClick = { onDiagnosticosDisponiblesChange((cantidadActual - 1).coerceAtLeast(0)) },
+                            enabled = cantidadActual > 0
+                        ) { Text("−") }
+                        Text(
+                            cantidadActual.toString(),
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(horizontal = 4.dp)
+                        )
+                        TextButton(
+                            onClick = { onDiagnosticosDisponiblesChange(cantidadActual + 1) }
+                        ) { Text("+") }
+                    }
                 }
             }
         }

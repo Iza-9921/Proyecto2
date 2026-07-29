@@ -70,6 +70,11 @@ class UserManagementViewModel(
         viewModelScope.launch { userRepository.setLicenseActive(userId, active) }
     }
 
+    /** Cupo de diagnósticos que puede iniciar un cliente; lo controla únicamente el administrador. `null` = ilimitados. */
+    fun setDiagnosticosDisponibles(userId: Long, cantidad: Int?) {
+        viewModelScope.launch { userRepository.setDiagnosticosDisponibles(userId, cantidad) }
+    }
+
     /** RF-18: el admin fuerza el cierre de una sesión activa (p.ej. si quedó colgada). */
     fun forceCloseSession(userId: Long) {
         activeSessionRegistry.markInactive(userId)

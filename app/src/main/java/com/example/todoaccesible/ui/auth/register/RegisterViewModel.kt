@@ -6,8 +6,10 @@ import com.example.todoaccesible.data.local.seed.MexicoLocations
 import com.example.todoaccesible.data.repository.AuthRepository
 import com.example.todoaccesible.data.repository.AuthResult
 import com.example.todoaccesible.data.repository.DiagnosticRepository
+import com.example.todoaccesible.data.repository.UserRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 
 data class RegisterUiState(
@@ -30,7 +32,9 @@ data class RegisterUiState(
     val responsable: String = "",
     val revision: String = "1",
     val loading: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
+    /** Cuenta creada, pero el cliente no tiene cupo de diagnósticos asignado por el administrador. */
+    val quotaBlocked: Boolean = false
 )
 
 /**
@@ -40,7 +44,8 @@ data class RegisterUiState(
  */
 class RegisterViewModel(
     private val authRepository: AuthRepository,
-    private val diagnosticRepository: DiagnosticRepository
+    private val diagnosticRepository: DiagnosticRepository,
+    private val userRepository: UserRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(RegisterUiState())
@@ -110,8 +115,13 @@ class RegisterViewModel(
                         tipoInmueble = state.tipoInmueble,
                         fechaEvaluacion = state.fechaEvaluacion
                     )
-                    _uiState.value = _uiState.value.copy(loading = false)
-                    onSuccess(draft.id)
+                    val disponibles = userRepository.observeById(result.session.userId).firstOrNull()?.diagnosticosDisponibles
+                    if (disponibles != null && disponibles <= 0) {
+                        _uiState.value = _uiState.value.copy(loading = false, quotaBlocked = true)
+                    } else {
+                        _uiState.value = _uiState.value.copy(loading = false)
+                        onSuccess(draft.id)
+                    }
                 }
                 is AuthResult.Error -> {
                     _uiState.value = _uiState.value.copy(loading = false, error = result.message)
@@ -121,4 +131,6 @@ class RegisterViewModel(
             }
         }
     }
+
+    fun dismissQuotaBlocked() { _uiState.value = _uiState.value.copy(quotaBlocked = false) }
 }

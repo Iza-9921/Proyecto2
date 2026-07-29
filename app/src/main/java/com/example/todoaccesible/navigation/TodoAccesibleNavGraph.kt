@@ -84,7 +84,7 @@ fun TodoAccesibleNavGraph(
         composable(Routes.Register.route) {
             val viewModel: RegisterViewModel = viewModel(
                 factory = viewModelFactory {
-                    initializer { RegisterViewModel(container.authRepository, container.diagnosticRepository) }
+                    initializer { RegisterViewModel(container.authRepository, container.diagnosticRepository, container.userRepository) }
                 }
             )
             RegisterScreen(
@@ -92,6 +92,9 @@ fun TodoAccesibleNavGraph(
                 onNavigateBack = { navController.popBackStack() },
                 onRegisterSuccess = { diagnosticId ->
                     navController.navigate(Routes.Questionnaire.build(diagnosticId)) { popUpTo(0) }
+                },
+                onQuotaBlockedAcknowledged = {
+                    navController.navigate(Routes.ClienteDashboard.route) { popUpTo(0) }
                 }
             )
         }
@@ -100,7 +103,7 @@ fun TodoAccesibleNavGraph(
             val clienteId = session?.userId ?: return@composable
             val viewModel: DashboardViewModel = viewModel(
                 factory = viewModelFactory {
-                    initializer { DashboardViewModel(container.diagnosticRepository, container.notificationRepository, clienteId) }
+                    initializer { DashboardViewModel(container.diagnosticRepository, container.notificationRepository, container.userRepository, clienteId) }
                 }
             )
             ClienteShell(navController, currentRoute) {

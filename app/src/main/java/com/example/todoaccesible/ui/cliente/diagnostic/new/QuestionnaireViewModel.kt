@@ -60,6 +60,14 @@ class QuestionnaireViewModel(
         .map { list -> list.associateBy { it.questionCodigo } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
+    /** Por sección: `true` si ya todas sus preguntas tienen respuesta (🟢), `false` si falta alguna (🟡). */
+    val sectionCompletion: StateFlow<Map<String, Boolean>> = combine(_questions, answersByCode) { questions, answers ->
+        questions.groupBy { it.seccionId }.mapValues { (_, qs) -> qs.all { answers[it.codigo]?.valor != null } }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+
+    private val _submitBlockedMessage = MutableStateFlow<String?>(null)
+    val submitBlockedMessage: StateFlow<String?> = _submitBlockedMessage
+
     private data class CurrentQA(val question: QuestionEntity?, val answer: AnswerEntity?)
 
     private val currentQA: StateFlow<CurrentQA> = combine(_currentIndex, _questions, answersByCode) { index, questions, answers ->
@@ -142,15 +150,6 @@ class QuestionnaireViewModel(
         _photoPendingDelete.value = null
     }
 
-    /** Primera pregunta sin responder (en orden de catálogo), o la última si ya todas tienen respuesta. */
-    private fun maxUnlockedIndex(): Int {
-        val questions = _questions.value
-        val answers = answersByCode.value
-        var idx = 0
-        while (idx < questions.size - 1 && answers[questions[idx].codigo]?.valor != null) idx++
-        return idx
-    }
-
     fun nextQuestion() {
         if (currentQA.value.answer?.valor == null) return
         if (_currentIndex.value < _questions.value.size - 1) _currentIndex.value++
@@ -160,17 +159,32 @@ class QuestionnaireViewModel(
         if (_currentIndex.value > 0) _currentIndex.value--
     }
 
-    /** Salta a la sección, pero nunca más allá de la primera pregunta sin responder (no se puede saltar preguntas). */
+    /**
+     * Navegación libre entre categorías: salta a la última pregunta ya respondida de la
+     * sección elegida (para continuar donde se quedó), o a la primera si aún no tiene
+     * ninguna respuesta. Nunca pierde las respuestas ya capturadas.
+     */
     fun jumpToSection(sectionId: String) {
-        val index = _questions.value.indexOfFirst { it.seccionId == sectionId }
-        if (index >= 0) _currentIndex.value = index.coerceAtMost(maxUnlockedIndex())
+        val sectionQuestions = _questions.value.withIndex().filter { it.value.seccionId == sectionId }
+        if (sectionQuestions.isEmpty()) return
+        val answers = answersByCode.value
+        val lastAnsweredIndex = sectionQuestions.lastOrNull { answers[it.value.codigo]?.valor != null }?.index
+        _currentIndex.value = lastAnsweredIndex ?: sectionQuestions.first().index
     }
 
     fun requestSubmit() {
         if (currentQA.value.answer?.valor == null) return
-        _showSubmitConfirm.value = true
+        viewModelScope.launch {
+            val unanswered = diagnosticRepository.countUnanswered(diagnosticId)
+            if (unanswered > 0) {
+                _submitBlockedMessage.value = "Debes responder todas las preguntas antes de finalizar el diagnóstico. Aún tienes preguntas pendientes en una o más categorías."
+            } else {
+                _showSubmitConfirm.value = true
+            }
+        }
     }
     fun dismissSubmit() { _showSubmitConfirm.value = false }
+    fun dismissSubmitBlocked() { _submitBlockedMessage.value = null }
 
     fun confirmSubmit(onSubmitted: () -> Unit) {
         viewModelScope.launch {
