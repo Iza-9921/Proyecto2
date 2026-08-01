@@ -60,6 +60,14 @@ data class AdminReviewUiState(
             (valorFilter == null || row.answer?.valor == valorFilter) &&
             (query.isBlank() || row.question.concepto.contains(query, ignoreCase = true) || row.question.codigo.contains(query, ignoreCase = true))
     }
+
+    /** Preguntas cuya validación del admin sigue abierta (pendiente o esperando info del cliente). */
+    val pendingReviewCount: Int get() = rows.count {
+        it.reviewStatus == QuestionReviewStatus.PENDIENTE || it.reviewStatus == QuestionReviewStatus.SOLICITAR_INFO
+    }
+
+    /** Solo se puede finalizar (Validar) cuando ya no queda ninguna pregunta sin dictamen del admin. */
+    val canFinalize: Boolean get() = rows.isNotEmpty() && pendingReviewCount == 0
 }
 
 class AdminReviewViewModel(
@@ -148,6 +156,19 @@ class AdminReviewViewModel(
         }
     }
 
+    /**
+     * Finaliza la evaluación: recalcula el resultado oficial con la
+     * validación por pregunta ya hecha por el admin y pasa el diagnóstico a
+     * VALIDADO. Distinto de `setStatus(VALIDADO)` porque además recalcula el
+     * scorecard (no solo cambia el estado).
+     */
+    fun finalizeEvaluation() {
+        viewModelScope.launch {
+            diagnosticRepository.finalizeOfficialScore(diagnosticId, reviewerId, _comentario.value.trim())
+            _comentario.value = ""
+        }
+    }
+
     /** Nueva funcionalidad: validación individual del administrador para una pregunta. */
     fun setQuestionReviewStatus(questionCodigo: String, status: QuestionReviewStatus) {
         viewModelScope.launch {
@@ -171,6 +192,19 @@ class AdminReviewViewModel(
             }
             val scorecard = diagnosticRepository.recalculateScore(diagnosticId) ?: return@launch
             val file = withContext(Dispatchers.IO) { PdfScorecardGenerator.generate(context, diagnostic, scorecard) }
+            FileShare.share(context, file, "application/pdf")
+        }
+    }
+
+    /** PDF con el resultado OFICIAL (post-validación), solo disponible una vez que el diagnóstico ya fue validado. */
+    fun exportPdfDefinitivo(context: Context) {
+        viewModelScope.launch {
+            val diagnostic = uiState.value.diagnostic ?: return@launch
+            if (diagnostic.estado != DiagnosticStatus.VALIDADO) return@launch
+            val scorecard = withContext(Dispatchers.Default) { diagnosticRepository.getOfficialScore(diagnosticId) } ?: return@launch
+            val file = withContext(Dispatchers.IO) {
+                PdfScorecardGenerator.generate(context, diagnostic, scorecard, esDefinitivo = true)
+            }
             FileShare.share(context, file, "application/pdf")
         }
     }

@@ -3,18 +3,24 @@ package com.example.todoaccesible.data.repository.impl
 import com.example.todoaccesible.data.local.entities.AnswerEntity
 import com.example.todoaccesible.data.local.entities.DiagnosticEntity
 import com.example.todoaccesible.data.local.entities.PhotoEntity
+import com.example.todoaccesible.data.local.entities.QuestionReviewEntity
 import com.example.todoaccesible.data.local.memory.InMemoryTable
 import com.example.todoaccesible.data.local.seed.QuestionCatalogSeeder
 import com.example.todoaccesible.data.model.AnswerValue
 import com.example.todoaccesible.data.model.DiagnosticStatus
+import com.example.todoaccesible.data.model.QuestionReviewStatus
+import com.example.todoaccesible.data.model.Role
 import com.example.todoaccesible.data.repository.DiagnosticHistoryRepository
 import com.example.todoaccesible.data.repository.DiagnosticRepository
 import com.example.todoaccesible.data.repository.NotificationRepository
 import com.example.todoaccesible.data.repository.QuestionCatalogRepository
+import com.example.todoaccesible.data.repository.QuestionReviewRepository
 import com.example.todoaccesible.data.repository.UserRepository
 import com.example.todoaccesible.domain.scoring.ScorecardCalculator
 import com.example.todoaccesible.domain.scoring.ScorecardQuestion
 import com.example.todoaccesible.domain.scoring.ScorecardResult
+import com.example.todoaccesible.domain.scoring.toAnswerValue
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 class DiagnosticRepositoryImpl(
@@ -24,7 +30,8 @@ class DiagnosticRepositoryImpl(
     private val questionCatalogRepository: QuestionCatalogRepository,
     private val notificationRepository: NotificationRepository,
     private val diagnosticHistoryRepository: DiagnosticHistoryRepository,
-    private val userRepository: UserRepository
+    private val userRepository: UserRepository,
+    private val questionReviewRepository: QuestionReviewRepository
 ) : DiagnosticRepository {
 
     companion object {
@@ -67,7 +74,13 @@ class DiagnosticRepositoryImpl(
                 entidadFederativa = "Ciudad de México",
                 ciudad = "Ciudad de México",
                 tipoInmueble = "Edificio de oficinas",
-                fechaEvaluacion = System.currentTimeMillis()
+                fechaEvaluacion = System.currentTimeMillis(),
+                fechaValidacion = System.currentTimeMillis(),
+                observacionesAdmin = null,
+                validadoPorNombre = "Administrador",
+                nivelOficial = result.nivel,
+                requeridoPctOficial = result.required.pct,
+                plusPctOficial = result.plus.pct
             )
             val demoAnswers = questions.mapIndexed { index, question ->
                 AnswerEntity(
@@ -78,6 +91,25 @@ class DiagnosticRepositoryImpl(
                 )
             }
             diagnostic to demoAnswers
+        }
+
+        /**
+         * Validación del admin por pregunta para el diagnóstico demo (todas
+         * "Aprobado", coherente con `demoSeed`). Sin esto, `getOfficialScore`
+         * recalcularía en vivo desde `QuestionReviewEntity` y no encontraría
+         * ningún registro, dando 0% en vez del resultado ya sembrado.
+         */
+        val demoQuestionReviews: List<QuestionReviewEntity> by lazy {
+            val diagnosticId = demoSeed.first.id
+            QuestionCatalogSeeder.questionEntities().mapIndexed { index, question ->
+                QuestionReviewEntity(
+                    id = index + 1L,
+                    diagnosticId = diagnosticId,
+                    questionCodigo = question.codigo,
+                    status = QuestionReviewStatus.APROBADO,
+                    reviewerId = UserRepositoryImpl.DEFAULT_ADMIN_ID
+                )
+            }
         }
     }
 
@@ -220,6 +252,16 @@ class DiagnosticRepositoryImpl(
             comentario = "Enviado por el cliente para revisión"
         )
         userRepository.decrementDiagnosticoDisponible(diagnostic.clienteId)
+
+        val admins = userRepository.observeAll().first().filter { it.rol == Role.ADMIN }
+        admins.forEach {
+            notificationRepository.notify(
+                diagnosticId = diagnosticId,
+                destinatarioId = it.id,
+                tipo = "nuevo_diagnostico",
+                mensaje = "Se ha recibido un nuevo diagnóstico para validación."
+            )
+        }
     }
 
     override suspend fun discardDraft(diagnosticId: Long) {
@@ -260,5 +302,65 @@ class DiagnosticRepositoryImpl(
             else -> return
         }
         notificationRepository.notify(diagnosticId = id, destinatarioId = diagnostic.clienteId, tipo = tipo, mensaje = mensaje)
+    }
+
+    /** Calcula (sin persistir ni notificar) el resultado basado en la validación por pregunta del admin. */
+    override suspend fun getOfficialScore(diagnosticId: Long): ScorecardResult? {
+        val questions = questionCatalogRepository.getAllQuestions()
+        val sectionNameById = questionCatalogRepository.getAllSections().associate { it.id to it.nombre }
+        val scorecardQuestions = questions.map {
+            ScorecardQuestion(
+                codigo = it.codigo,
+                seccionId = it.seccionId,
+                seccionNombre = sectionNameById[it.seccionId] ?: it.seccionId,
+                credito = it.credito
+            )
+        }
+        val reviewByCode = questionReviewRepository.observeForDiagnostic(diagnosticId).first()
+            .associate { it.questionCodigo to it.status }
+        val answerValues = questions.associate { it.codigo to (reviewByCode[it.codigo]?.toAnswerValue() ?: AnswerValue.PENDIENTE) }
+        return ScorecardCalculator.calculate(scorecardQuestions, answerValues)
+    }
+
+    override suspend fun finalizeOfficialScore(diagnosticId: Long, reviewerId: Long, comentario: String): ScorecardResult? {
+        val diagnostic = diagnostics.snapshot.find { it.id == diagnosticId } ?: return null
+        val result = getOfficialScore(diagnosticId) ?: return null
+
+        val validadoPorNombre = userRepository.observeAll().first().find { it.id == reviewerId }?.nombre
+        val previousStatus = diagnostic.estado
+        val fechaValidacion = System.currentTimeMillis()
+
+        diagnostics.mutate { list ->
+            list.map {
+                if (it.id == diagnosticId) {
+                    it.copy(
+                        estado = DiagnosticStatus.VALIDADO,
+                        nivelOficial = result.nivel,
+                        requeridoPctOficial = result.required.pct,
+                        plusPctOficial = result.plus.pct,
+                        fechaValidacion = fechaValidacion,
+                        observacionesAdmin = comentario.ifBlank { null },
+                        validadoPorNombre = validadoPorNombre
+                    )
+                } else it
+            }
+        }
+
+        diagnosticHistoryRepository.record(
+            diagnosticId = diagnosticId,
+            previousStatus = previousStatus,
+            newStatus = DiagnosticStatus.VALIDADO,
+            reviewerId = reviewerId,
+            comentario = comentario
+        )
+
+        notificationRepository.notify(
+            diagnosticId = diagnosticId,
+            destinatarioId = diagnostic.clienteId,
+            tipo = "validado",
+            mensaje = "Tu diagnóstico ha sido revisado. Ya puedes consultar y descargar tu resultado final."
+        )
+
+        return result
     }
 }

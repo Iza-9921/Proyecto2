@@ -55,4 +55,20 @@ interface DiagnosticRepository {
      * rechazo, qué información falta, etc.).
      */
     suspend fun updateStatus(id: Long, status: DiagnosticStatus, reviewerId: Long?, comentario: String = "")
+
+    /**
+     * Calcula el scorecard con base en la validación por pregunta del admin
+     * (no las respuestas del cliente), sin persistir ni notificar. Útil para
+     * regenerar el PDF/Excel definitivos después de que ya se validó.
+     */
+    suspend fun getOfficialScore(diagnosticId: Long): ScorecardResult?
+
+    /**
+     * Cierra la evaluación del administrador: recalcula el scorecard con la
+     * validación por pregunta (no las respuestas originales del cliente),
+     * lo guarda como resultado OFICIAL, pasa el diagnóstico a VALIDADO y
+     * notifica al cliente. [reviewerId] es el admin que finaliza;
+     * [comentario] son sus observaciones (opcional).
+     */
+    suspend fun finalizeOfficialScore(diagnosticId: Long, reviewerId: Long, comentario: String): ScorecardResult?
 }

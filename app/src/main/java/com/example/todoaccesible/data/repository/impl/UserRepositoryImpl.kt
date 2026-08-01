@@ -16,6 +16,7 @@ class UserRepositoryImpl(
 ) : UserRepository {
 
     companion object {
+        const val DEFAULT_ADMIN_ID = 1L
         const val DEFAULT_ADMIN_EMAIL = "admin@todoaccesible.mx"
         const val DEFAULT_ADMIN_PASSWORD = "TodoAccesible2026"
 
@@ -32,7 +33,7 @@ class UserRepositoryImpl(
          */
         fun defaultUsers(): List<UserEntity> = listOf(
             UserEntity(
-                id = 1,
+                id = DEFAULT_ADMIN_ID,
                 email = DEFAULT_ADMIN_EMAIL,
                 passwordHash = PasswordHasher.hash(DEFAULT_ADMIN_PASSWORD),
                 nombre = "Administrador",

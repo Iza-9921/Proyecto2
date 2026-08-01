@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.todoaccesible.core.designsystem.HistoryEntryUi
 import com.example.todoaccesible.core.util.FileShare
 import com.example.todoaccesible.data.local.entities.DiagnosticEntity
+import com.example.todoaccesible.data.model.DiagnosticStatus
 import com.example.todoaccesible.data.repository.DiagnosticHistoryRepository
 import com.example.todoaccesible.data.repository.DiagnosticRepository
 import com.example.todoaccesible.data.repository.UserRepository
@@ -71,8 +72,15 @@ class DiagnosticDetailViewModel(
                 )
                 return@launch
             }
+            // Ya validado por el admin: el PDF definitivo usa el resultado oficial, no el preliminar del cliente.
+            val esDefinitivo = diagnostic.estado == DiagnosticStatus.VALIDADO
+            val scorecardParaPdf = if (esDefinitivo) {
+                diagnosticRepository.getOfficialScore(diagnosticId) ?: scorecard
+            } else {
+                scorecard
+            }
             val file = withContext(Dispatchers.IO) {
-                PdfScorecardGenerator.generate(context, diagnostic, scorecard)
+                PdfScorecardGenerator.generate(context, diagnostic, scorecardParaPdf, esDefinitivo)
             }
             FileShare.share(context, file, "application/pdf")
         }

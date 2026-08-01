@@ -48,13 +48,16 @@ class AppContainer(context: Context) {
 
     val diagnosticHistoryRepository: DiagnosticHistoryRepository = DiagnosticHistoryRepositoryImpl()
 
-    val questionReviewRepository: QuestionReviewRepository = QuestionReviewRepositoryImpl()
+    val questionReviewRepository: QuestionReviewRepository = QuestionReviewRepositoryImpl(
+        InMemoryTable(DiagnosticRepositoryImpl.demoQuestionReviews)
+    )
 
     val diagnosticRepository: DiagnosticRepository = DiagnosticRepositoryImpl(
         questionCatalogRepository = questionCatalogRepository,
         notificationRepository = notificationRepository,
         diagnosticHistoryRepository = diagnosticHistoryRepository,
-        userRepository = userRepository
+        userRepository = userRepository,
+        questionReviewRepository = questionReviewRepository
     )
 
     init {

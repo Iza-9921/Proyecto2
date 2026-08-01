@@ -31,6 +31,7 @@ import com.example.todoaccesible.core.designsystem.DiagnosticHistorySection
 import com.example.todoaccesible.core.designsystem.DiagnosticStatusChip
 import com.example.todoaccesible.core.designsystem.ScorecardHeaderCard
 import com.example.todoaccesible.core.designsystem.SectionScoreRow
+import com.example.todoaccesible.data.model.DiagnosticStatus
 
 @Composable
 fun DiagnosticDetailScreen(
@@ -84,6 +85,13 @@ fun DiagnosticDetailScreen(
                     nivel = scorecard.nivel,
                     required = scorecard.required,
                     plus = scorecard.plus
+                )
+            }
+            item {
+                Text(
+                    if (diagnostic.estado == DiagnosticStatus.VALIDADO) "Resultado oficial" else "Resultado preliminar",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
             item {

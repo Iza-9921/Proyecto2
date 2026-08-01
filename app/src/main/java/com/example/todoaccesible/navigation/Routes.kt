@@ -13,6 +13,9 @@ sealed class Routes(val route: String) {
     object DiagnosticDetail : Routes("cliente/diagnostic/{diagnosticId}/detail") {
         fun build(diagnosticId: Long) = "cliente/diagnostic/$diagnosticId/detail"
     }
+    object DiagnosticResult : Routes("cliente/diagnostic/{diagnosticId}/result") {
+        fun build(diagnosticId: Long) = "cliente/diagnostic/$diagnosticId/result"
+    }
     object Notifications : Routes("cliente/notifications")
 
     // Admin

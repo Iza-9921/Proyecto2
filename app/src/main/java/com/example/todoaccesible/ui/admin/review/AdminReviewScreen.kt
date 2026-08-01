@@ -20,6 +20,7 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -66,9 +67,14 @@ import com.example.todoaccesible.core.theme.EstadoNoCumple
 import com.example.todoaccesible.core.theme.EstadoPendiente
 import com.example.todoaccesible.core.theme.PlusFuchsia
 import com.example.todoaccesible.core.theme.RequiredNavy
+import com.example.todoaccesible.data.local.entities.DiagnosticEntity
 import com.example.todoaccesible.data.model.AnswerValue
 import com.example.todoaccesible.data.model.Credito
+import com.example.todoaccesible.data.model.DiagnosticStatus
 import com.example.todoaccesible.data.model.QuestionReviewStatus
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 private data class PhotoViewerState(val photos: List<PhotoItem>, val initialIndex: Int)
 
@@ -207,6 +213,22 @@ fun AdminReviewScreen(
                         }
                     }
                 }
+                val diagnosticoActual = uiState.diagnostic
+                if (diagnosticoActual != null) {
+                    item {
+                        FinalizeEvaluationBlock(
+                            diagnostico = diagnosticoActual,
+                            comentario = uiState.comentario,
+                            canFinalize = uiState.canFinalize,
+                            pendingReviewCount = uiState.pendingReviewCount,
+                            onComentarioChange = viewModel::setComentario,
+                            onValidar = viewModel::finalizeEvaluation,
+                            onRechazar = { viewModel.setStatus(DiagnosticStatus.RECHAZADO) },
+                            onSolicitarInfo = { viewModel.setStatus(DiagnosticStatus.INFO_REQUERIDA) },
+                            onDescargarPdfDefinitivo = { viewModel.exportPdfDefinitivo(context) }
+                        )
+                    }
+                }
             }
         }
     }
@@ -324,6 +346,67 @@ private fun QuestionReviewBlock(
                 },
                 modifier = Modifier.fillMaxWidth()
             )
+        }
+    }
+}
+
+/**
+ * Bloque nuevo, independiente de las filas de preguntas: cierra el
+ * diagnóstico completo. "Validar" recalcula el resultado OFICIAL a partir de
+ * la validación por pregunta ya capturada arriba (solo se habilita cuando ya
+ * no queda ninguna pendiente/solicitando información). "Rechazar" y
+ * "Solicitar información" reutilizan el cambio de estado global que ya
+ * existía en el ViewModel.
+ */
+@Composable
+private fun FinalizeEvaluationBlock(
+    diagnostico: DiagnosticEntity,
+    comentario: String,
+    canFinalize: Boolean,
+    pendingReviewCount: Int,
+    onComentarioChange: (String) -> Unit,
+    onValidar: () -> Unit,
+    onRechazar: () -> Unit,
+    onSolicitarInfo: () -> Unit,
+    onDescargarPdfDefinitivo: () -> Unit
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Finalizar evaluación", style = MaterialTheme.typography.titleMedium)
+
+            if (diagnostico.estado == DiagnosticStatus.VALIDADO) {
+                Text(
+                    "Diagnóstico validado" +
+                        (diagnostico.validadoPorNombre?.let { " por $it" } ?: "") +
+                        (diagnostico.fechaValidacion?.let {
+                            " el ${SimpleDateFormat("dd/MM/yyyy", Locale("es", "MX")).format(Date(it))}"
+                        } ?: "") + ".",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Button(onClick = onDescargarPdfDefinitivo) {
+                    Text("Descargar PDF definitivo")
+                }
+            } else {
+                OutlinedTextField(
+                    value = comentario,
+                    onValueChange = onComentarioChange,
+                    label = { Text("Observaciones (opcional)") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (!canFinalize) {
+                    Text(
+                        "Aún faltan $pendingReviewCount preguntas por validar antes de poder finalizar.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = onValidar, enabled = canFinalize) { Text("Validar") }
+                    OutlinedButton(onClick = onSolicitarInfo) { Text("Solicitar información") }
+                    OutlinedButton(onClick = onRechazar) { Text("Rechazar") }
+                }
+            }
         }
     }
 }

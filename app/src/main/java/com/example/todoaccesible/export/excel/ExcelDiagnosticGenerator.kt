@@ -5,8 +5,8 @@ import android.graphics.BitmapFactory
 import com.example.todoaccesible.R
 import com.example.todoaccesible.data.local.entities.DiagnosticEntity
 import com.example.todoaccesible.data.local.entities.SectionEntity
-import com.example.todoaccesible.data.model.AnswerValue
 import com.example.todoaccesible.data.model.Credito
+import com.example.todoaccesible.data.model.QuestionReviewStatus
 import com.example.todoaccesible.ui.admin.review.ReviewRow
 import org.apache.poi.ss.usermodel.CellStyle
 import org.apache.poi.ss.usermodel.FillPatternType
@@ -46,7 +46,9 @@ object ExcelDiagnosticGenerator {
         sheet.setColumnWidth(3, 5 * 256)
         sheet.setColumnWidth(4, 11 * 256)
         sheet.setColumnWidth(5, 55 * 256)
-        sheet.setColumnWidth(6, 45 * 256)
+        sheet.setColumnWidth(6, 16 * 256)
+        sheet.setColumnWidth(7, 16 * 256)
+        sheet.setColumnWidth(8, 45 * 256)
 
         val styles = Styles(workbook)
 
@@ -76,8 +78,11 @@ object ExcelDiagnosticGenerator {
         anchor.row1 = startRow
         anchor.setCol2(1)
         anchor.row2 = startRow + 5
-        val picture = drawing.createPicture(anchor, pictureIndex)
-        picture.resize(0.6)
+        // Nota: NO llamar a picture.resize() — internamente usa java.awt.Dimension,
+        // que no existe en Android y provoca un NoClassDefFoundError en tiempo de
+        // ejecución (crashea la app). El ClientAnchor ya delimita el tamaño de la
+        // imagen (columnas 0-1, filas startRow..startRow+5) sin necesitar AWT.
+        drawing.createPicture(anchor, pictureIndex)
 
         return startRow + 6
     }
@@ -117,7 +122,7 @@ object ExcelDiagnosticGenerator {
 
     private fun writeTableHeader(sheet: XSSFSheet, styles: Styles, startRow: Int): Int {
         val headerRow = sheet.createRow(startRow)
-        val headers = listOf("No.", "AP", "P", "NC", "Crédito", "Concepto", "Comentarios/Observaciones")
+        val headers = listOf("No.", "AP", "P", "NC", "Crédito", "Concepto", "Respuesta cliente", "Estado admin", "Comentarios")
         headers.forEachIndexed { index, text ->
             headerRow.createCell(index).apply {
                 setCellValue(text)
@@ -143,28 +148,30 @@ object ExcelDiagnosticGenerator {
             val headerRow = sheet.createRow(rowIndex)
             headerRow.createCell(0).apply { setCellValue("$seccionId.00"); setCellStyle(styles.sectionStyle) }
             headerRow.createCell(1).apply { setCellValue(sectionNombre); setCellStyle(styles.sectionStyle) }
-            for (col in 2..6) {
+            for (col in 2..8) {
                 headerRow.createCell(col).setCellStyle(styles.sectionStyle)
             }
-            sheet.addMergedRegion(CellRangeAddress(rowIndex, rowIndex, 1, 6))
+            sheet.addMergedRegion(CellRangeAddress(rowIndex, rowIndex, 1, 8))
             rowIndex++
 
             sectionRows.sortedBy { it.question.codigo }.forEach { row ->
                 val dataRow = sheet.createRow(rowIndex)
                 dataRow.createCell(0).apply { setCellValue(row.question.codigo); setCellStyle(styles.infoStyle) }
 
-                val valor = row.answer?.valor
+                // AP/P/NC reflejan el "Estado admin" (la validación del administrador), no la respuesta original del cliente.
+                val estadoAdmin = row.reviewStatus
                 dataRow.createCell(1).apply {
-                    if (valor == AnswerValue.APROBADO) setCellValue(1.0)
-                    setCellStyle(if (valor == AnswerValue.APROBADO) styles.apStyle else styles.emptyStyle)
+                    if (estadoAdmin == QuestionReviewStatus.APROBADO) setCellValue(1.0)
+                    setCellStyle(if (estadoAdmin == QuestionReviewStatus.APROBADO) styles.apStyle else styles.emptyStyle)
                 }
                 dataRow.createCell(2).apply {
-                    if (valor == AnswerValue.PENDIENTE) setCellValue(1.0)
-                    setCellStyle(if (valor == AnswerValue.PENDIENTE) styles.pStyle else styles.emptyStyle)
+                    val esPendiente = estadoAdmin == QuestionReviewStatus.PENDIENTE || estadoAdmin == QuestionReviewStatus.SOLICITAR_INFO
+                    if (esPendiente) setCellValue(1.0)
+                    setCellStyle(if (esPendiente) styles.pStyle else styles.emptyStyle)
                 }
                 dataRow.createCell(3).apply {
-                    if (valor == AnswerValue.NO_CUMPLE) setCellValue(1.0)
-                    setCellStyle(if (valor == AnswerValue.NO_CUMPLE) styles.ncStyle else styles.emptyStyle)
+                    if (estadoAdmin == QuestionReviewStatus.NO_CUMPLE) setCellValue(1.0)
+                    setCellStyle(if (estadoAdmin == QuestionReviewStatus.NO_CUMPLE) styles.ncStyle else styles.emptyStyle)
                 }
                 dataRow.createCell(4).apply {
                     setCellValue(if (row.question.credito == Credito.REQUIRED) "Required" else "Plus")
@@ -172,7 +179,15 @@ object ExcelDiagnosticGenerator {
                 }
                 dataRow.createCell(5).apply { setCellValue(row.question.concepto); setCellStyle(styles.infoStyle) }
                 dataRow.createCell(6).apply {
-                    setCellValue(row.answer?.comentario.orEmpty())
+                    setCellValue(row.answer?.valor?.label ?: "—")
+                    setCellStyle(styles.infoStyle)
+                }
+                dataRow.createCell(7).apply {
+                    setCellValue(estadoAdmin.label)
+                    setCellStyle(styles.infoStyle)
+                }
+                dataRow.createCell(8).apply {
+                    setCellValue(row.reviewComentario.ifBlank { row.answer?.comentario.orEmpty() })
                     setCellStyle(styles.infoStyle)
                 }
                 rowIndex++

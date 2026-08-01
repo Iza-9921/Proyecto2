@@ -38,6 +38,8 @@ import com.example.todoaccesible.ui.cliente.diagnostic.new.ProjectInfoScreen
 import com.example.todoaccesible.ui.cliente.diagnostic.new.ProjectInfoViewModel
 import com.example.todoaccesible.ui.cliente.diagnostic.new.QuestionnaireScreen
 import com.example.todoaccesible.ui.cliente.diagnostic.new.QuestionnaireViewModel
+import com.example.todoaccesible.ui.cliente.diagnostic.result.DiagnosticResultScreen
+import com.example.todoaccesible.ui.cliente.diagnostic.result.DiagnosticResultViewModel
 import com.example.todoaccesible.ui.cliente.notifications.NotificationsScreen
 import com.example.todoaccesible.ui.cliente.notifications.NotificationsViewModel
 import kotlinx.coroutines.launch
@@ -148,8 +150,36 @@ fun TodoAccesibleNavGraph(
                     navController.navigate(Routes.ClienteDashboard.route) { popUpTo(Routes.ClienteDashboard.route) { inclusive = true } }
                 },
                 onSubmitted = { id ->
-                    navController.navigate(Routes.DiagnosticDetail.build(id)) {
+                    navController.navigate(Routes.DiagnosticResult.build(id)) {
                         popUpTo(Routes.ClienteDashboard.route)
+                    }
+                }
+            )
+        }
+
+        composable(
+            route = Routes.DiagnosticResult.route,
+            arguments = listOf(navArgument(Routes.ARG_DIAGNOSTIC_ID) { type = NavType.LongType })
+        ) { backStackEntry ->
+            val diagnosticId = backStackEntry.arguments?.getLong(Routes.ARG_DIAGNOSTIC_ID) ?: return@composable
+            val viewModel: DiagnosticResultViewModel = viewModel(
+                factory = viewModelFactory {
+                    initializer {
+                        DiagnosticResultViewModel(diagnosticId, container.diagnosticRepository, container.questionCatalogRepository)
+                    }
+                }
+            )
+            DiagnosticResultScreen(
+                viewModel = viewModel,
+                onFinalizar = {
+                    android.util.Log.d("DiagnosticResultScreen", "onFinalizar callback ejecutandose, currentDestination=${navController.currentDestination?.route}")
+                    try {
+                        navController.navigate(Routes.ClienteDashboard.route) {
+                            popUpTo(0)
+                        }
+                        android.util.Log.d("DiagnosticResultScreen", "navigate() OK, nuevo destino=${navController.currentDestination?.route}")
+                    } catch (e: Exception) {
+                        android.util.Log.e("DiagnosticResultScreen", "navigate() fallo", e)
                     }
                 }
             )
@@ -183,7 +213,17 @@ fun TodoAccesibleNavGraph(
             val viewModel: NotificationsViewModel = viewModel(
                 factory = viewModelFactory { initializer { NotificationsViewModel(container.notificationRepository, userId) } }
             )
-            NotificationsScreen(viewModel = viewModel, onNavigateBack = { navController.popBackStack() })
+            NotificationsScreen(
+                viewModel = viewModel,
+                onNavigateBack = { navController.popBackStack() },
+                onOpenDiagnostic = { id ->
+                    if (session?.rol == com.example.todoaccesible.data.model.Role.ADMIN) {
+                        navController.navigate(Routes.AdminReview.build(id))
+                    } else {
+                        navController.navigate(Routes.DiagnosticDetail.build(id))
+                    }
+                }
+            )
         }
 
         composable(Routes.AdminDashboard.route) {

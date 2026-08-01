@@ -1,5 +1,6 @@
 package com.example.todoaccesible.ui.cliente.diagnostic.new
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,12 +10,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -28,6 +33,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.todoaccesible.core.designsystem.BigTouchButton
 import com.example.todoaccesible.core.designsystem.BigTouchOutlinedButton
@@ -48,6 +54,8 @@ fun QuestionnaireScreen(
     val uiState by viewModel.uiState.collectAsState()
     val sectionCompletion by viewModel.sectionCompletion.collectAsState()
     val submitBlockedMessage by viewModel.submitBlockedMessage.collectAsState()
+    val showQuestionList by viewModel.showQuestionList.collectAsState()
+    val currentSectionQuestions by viewModel.currentSectionQuestions.collectAsState()
 
     Scaffold(
         topBar = {
@@ -78,6 +86,17 @@ fun QuestionnaireScreen(
                 sectionCompletion = sectionCompletion
             )
 
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.End
+            ) {
+                TextButton(onClick = viewModel::openQuestionList) {
+                    Text("Ver preguntas")
+                }
+            }
+
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -99,6 +118,7 @@ fun QuestionnaireScreen(
                     AnswerOptionButton("AP", AnswerValue.APROBADO, uiState.currentAnswerValue, viewModel::selectAnswer, Modifier.weight(1f))
                     AnswerOptionButton("P", AnswerValue.PENDIENTE, uiState.currentAnswerValue, viewModel::selectAnswer, Modifier.weight(1f))
                     AnswerOptionButton("NC", AnswerValue.NO_CUMPLE, uiState.currentAnswerValue, viewModel::selectAnswer, Modifier.weight(1f))
+                    AnswerOptionButton("NA", AnswerValue.NO_APLICA, uiState.currentAnswerValue, viewModel::selectAnswer, Modifier.weight(1f))
                 }
 
                 if (!uiState.canAdvance) {
@@ -189,6 +209,34 @@ fun QuestionnaireScreen(
                 TextButton(onClick = viewModel::dismissSubmitBlocked) { Text("Entendido") }
             }
         )
+    }
+
+    if (showQuestionList) {
+        ModalBottomSheet(onDismissRequest = viewModel::dismissQuestionList) {
+            LazyColumn(modifier = Modifier.fillMaxWidth()) {
+                items(currentSectionQuestions, key = { it.index }) { item ->
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { viewModel.goToQuestion(item.index) }
+                            .padding(horizontal = 24.dp, vertical = 12.dp)
+                    ) {
+                        Text(
+                            text = "${if (item.answered) "🟢" else "🟡"} ${item.numero}. ${item.question.concepto}",
+                            style = MaterialTheme.typography.bodyLarge,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = if (item.answered) "Contestada" else "Pendiente",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (item.answered) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                        )
+                    }
+                    HorizontalDivider()
+                }
+            }
+        }
     }
 }
 

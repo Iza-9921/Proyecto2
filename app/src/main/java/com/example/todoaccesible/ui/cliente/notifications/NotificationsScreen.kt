@@ -31,7 +31,8 @@ import java.util.Locale
 @Composable
 fun NotificationsScreen(
     viewModel: NotificationsViewModel,
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    onOpenDiagnostic: (Long) -> Unit = {}
 ) {
     val notifications by viewModel.notifications.collectAsState()
 
@@ -62,7 +63,10 @@ fun NotificationsScreen(
             items(notifications, key = { it.id }) { notification ->
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    onClick = { if (!notification.leido) viewModel.markRead(notification.id) }
+                    onClick = {
+                        if (!notification.leido) viewModel.markRead(notification.id)
+                        onOpenDiagnostic(notification.diagnosticId)
+                    }
                 ) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(notification.mensaje, style = MaterialTheme.typography.bodyLarge)

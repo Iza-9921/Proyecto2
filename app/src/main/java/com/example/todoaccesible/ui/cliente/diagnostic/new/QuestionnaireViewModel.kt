@@ -42,6 +42,14 @@ data class QuestionnaireUiState(
     val canAdvance: Boolean get() = currentAnswerValue != null
 }
 
+/** Fila del listado de estado de preguntas de una categoría (panel "Ver preguntas"). */
+data class QuestionStatusItem(
+    val index: Int,
+    val numero: Int,
+    val question: QuestionEntity,
+    val answered: Boolean
+)
+
 class QuestionnaireViewModel(
     private val diagnosticId: Long,
     private val diagnosticRepository: DiagnosticRepository,
@@ -51,6 +59,9 @@ class QuestionnaireViewModel(
     private val _currentIndex = MutableStateFlow(0)
     private val _questions = MutableStateFlow<List<QuestionEntity>>(emptyList())
     private val _sections = MutableStateFlow<List<SectionEntity>>(emptyList())
+
+    /** Última pregunta visitada por cada sección, para volver exactamente ahí al cambiar de categoría. */
+    private val lastIndexBySection = mutableMapOf<String, Int>()
     private val _showSubmitConfirm = MutableStateFlow(false)
     private val _showDiscardConfirm = MutableStateFlow(false)
     private val _photoPendingDelete = MutableStateFlow<PhotoItem?>(null)
@@ -68,12 +79,30 @@ class QuestionnaireViewModel(
     private val _submitBlockedMessage = MutableStateFlow<String?>(null)
     val submitBlockedMessage: StateFlow<String?> = _submitBlockedMessage
 
+    private val _showQuestionList = MutableStateFlow(false)
+    val showQuestionList: StateFlow<Boolean> = _showQuestionList
+
     private data class CurrentQA(val question: QuestionEntity?, val answer: AnswerEntity?)
 
     private val currentQA: StateFlow<CurrentQA> = combine(_currentIndex, _questions, answersByCode) { index, questions, answers ->
         val question = questions.getOrNull(index)
         CurrentQA(question, question?.let { answers[it.codigo] })
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), CurrentQA(null, null))
+
+    /** Listado (número, texto y estado) de todas las preguntas de la categoría actual, para el panel "Ver preguntas". */
+    val currentSectionQuestions: StateFlow<List<QuestionStatusItem>> = combine(_questions, currentQA, answersByCode) { questions, qa, answers ->
+        val sectionId = qa.question?.seccionId ?: return@combine emptyList()
+        questions.withIndex()
+            .filter { it.value.seccionId == sectionId }
+            .map { (index, question) ->
+                QuestionStatusItem(
+                    index = index,
+                    numero = index + 1,
+                    question = question,
+                    answered = answers[question.codigo]?.valor != null
+                )
+            }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val currentPhotos: StateFlow<List<PhotoItem>> = currentQA.flatMapLatest { qa ->
         val answerId = qa.answer?.id
@@ -108,6 +137,7 @@ class QuestionnaireViewModel(
         viewModelScope.launch {
             _sections.value = questionCatalogRepository.getAllSections()
             _questions.value = questionCatalogRepository.getAllQuestions()
+            moveTo(_currentIndex.value)
         }
     }
 
@@ -150,26 +180,86 @@ class QuestionnaireViewModel(
         _photoPendingDelete.value = null
     }
 
-    fun nextQuestion() {
-        if (currentQA.value.answer?.valor == null) return
-        if (_currentIndex.value < _questions.value.size - 1) _currentIndex.value++
+    /** Mueve el índice actual y recuerda esa posición como el último punto visitado de su sección. */
+    private fun moveTo(index: Int) {
+        val question = _questions.value.getOrNull(index) ?: return
+        lastIndexBySection[question.seccionId] = index
+        _currentIndex.value = index
     }
 
-    fun previousQuestion() {
-        if (_currentIndex.value > 0) _currentIndex.value--
+    /** Posición actual dentro de su propia categoría: la guardada en `lastIndexBySection`, nunca la de otra sección. */
+    private fun currentIndexForOwnSection(): Int {
+        val question = currentQA.value.question ?: return _currentIndex.value
+        return lastIndexBySection[question.seccionId] ?: _currentIndex.value
     }
 
     /**
-     * Navegación libre entre categorías: salta a la última pregunta ya respondida de la
-     * sección elegida (para continuar donde se quedó), o a la primera si aún no tiene
-     * ninguna respuesta. Nunca pierde las respuestas ya capturadas.
+     * Busca, después de [sectionId] (en el orden de las secciones), la primera que aún tenga
+     * alguna pregunta sin responder. Devuelve `null` si todas las secciones posteriores ya
+     * están completas.
+     */
+    private fun nextPendingSectionAfter(sectionId: String): String? {
+        val order = _sections.value.map { it.id }
+        val currentPos = order.indexOf(sectionId)
+        if (currentPos == -1) return null
+        val answers = answersByCode.value
+        val questionsBySection = _questions.value.groupBy { it.seccionId }
+        for (i in currentPos + 1 until order.size) {
+            val sectionQuestions = questionsBySection[order[i]] ?: continue
+            if (sectionQuestions.any { answers[it.codigo]?.valor == null }) return order[i]
+        }
+        return null
+    }
+
+    fun nextQuestion() {
+        if (currentQA.value.answer?.valor == null) return
+        val current = currentIndexForOwnSection()
+        val currentSectionId = _questions.value.getOrNull(current)?.seccionId
+        val isLastInSection = currentSectionId != null &&
+            _questions.value.withIndex().filter { it.value.seccionId == currentSectionId }
+                .maxOf { it.index } == current
+        if (isLastInSection) {
+            val nextSectionId = nextPendingSectionAfter(currentSectionId)
+            if (nextSectionId != null) {
+                jumpToSection(nextSectionId)
+                return
+            }
+        }
+        if (current < _questions.value.size - 1) moveTo(current + 1)
+    }
+
+    fun previousQuestion() {
+        val current = currentIndexForOwnSection()
+        if (current > 0) moveTo(current - 1)
+    }
+
+    /**
+     * Navegación libre entre categorías: vuelve exactamente a la última pregunta que el
+     * usuario visitó en esa sección (para que "Siguiente" continúe desde ahí, sin reiniciar
+     * el recorrido ni mezclar el índice con el de otra categoría). Si nunca la ha visitado,
+     * salta a la última ya respondida (para continuar donde se quedó) o a la primera si aún
+     * no tiene ninguna respuesta. Nunca pierde las respuestas ni fotos ya capturadas.
      */
     fun jumpToSection(sectionId: String) {
         val sectionQuestions = _questions.value.withIndex().filter { it.value.seccionId == sectionId }
         if (sectionQuestions.isEmpty()) return
+        val remembered = lastIndexBySection[sectionId]
+        if (remembered != null) {
+            moveTo(remembered)
+            return
+        }
         val answers = answersByCode.value
         val lastAnsweredIndex = sectionQuestions.lastOrNull { answers[it.value.codigo]?.valor != null }?.index
-        _currentIndex.value = lastAnsweredIndex ?: sectionQuestions.first().index
+        moveTo(lastAnsweredIndex ?: sectionQuestions.first().index)
+    }
+
+    fun openQuestionList() { _showQuestionList.value = true }
+    fun dismissQuestionList() { _showQuestionList.value = false }
+
+    /** Navegación rápida desde el panel "Ver preguntas": va directo a la pregunta elegida sin perder respuestas ni fotos. */
+    fun goToQuestion(index: Int) {
+        moveTo(index)
+        dismissQuestionList()
     }
 
     fun requestSubmit() {

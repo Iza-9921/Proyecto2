@@ -37,14 +37,17 @@ object PdfScorecardGenerator {
     private val MUTED_COLOR = Color.parseColor("#6B7280")
     private val CARD_BORDER = Color.parseColor("#D9D9D9")
 
-    fun generate(context: Context, diagnostic: DiagnosticEntity, scorecard: ScorecardResult): File {
+    fun generate(context: Context, diagnostic: DiagnosticEntity, scorecard: ScorecardResult, esDefinitivo: Boolean = false): File {
         val document = PdfDocument()
         val page = document.startPage(PdfDocument.PageInfo.Builder(PAGE_WIDTH, PAGE_HEIGHT, 1).create())
         val canvas = page.canvas
 
-        drawHeader(context, canvas, diagnostic)
+        drawHeader(context, canvas, diagnostic, esDefinitivo)
         drawSummaryBoxes(canvas, diagnostic, scorecard)
         drawSectionGrid(canvas, scorecard.sections)
+        if (esDefinitivo && diagnostic.fechaValidacion != null) {
+            drawValidationInfo(canvas, diagnostic)
+        }
         drawFooterLegend(canvas)
 
         document.finishPage(page)
@@ -56,7 +59,7 @@ object PdfScorecardGenerator {
         return file
     }
 
-    private fun drawHeader(context: Context, canvas: Canvas, diagnostic: DiagnosticEntity) {
+    private fun drawHeader(context: Context, canvas: Canvas, diagnostic: DiagnosticEntity, esDefinitivo: Boolean) {
         val logoBitmap = BitmapFactory.decodeResource(context.resources, R.drawable.logo_todo_accesible)
         val logoWidth = 90f
         val logoHeight = logoWidth * logoBitmap.height / logoBitmap.width
@@ -68,7 +71,8 @@ object PdfScorecardGenerator {
             typeface = Typeface.DEFAULT_BOLD
             isAntiAlias = true
         }
-        canvas.drawText("Scorecard v2.6", 150f, 45f, titlePaint)
+        val tituloSufijo = if (esDefinitivo) " — Resultado oficial (Definitivo)" else " — (Preliminar)"
+        canvas.drawText("Scorecard v2.6$tituloSufijo", 150f, 45f, titlePaint)
 
         val infoPaint = Paint().apply {
             color = TEXT_COLOR
@@ -134,6 +138,34 @@ object PdfScorecardGenerator {
 
             drawCreditBar(canvas, "Required", section.required, rect.left + 10f, rect.top + 30f, rect.width() - 20f, REQUIRED_COLOR, compact = true)
             drawCreditBar(canvas, "Plus", section.plus, rect.left + 10f, rect.top + 54f, rect.width() - 20f, PLUS_COLOR, compact = true)
+        }
+    }
+
+    /**
+     * Datos de la validación oficial del admin, dibujados en el espacio ya
+     * libre entre el grid de secciones (termina ~610pt) y el pie de página
+     * (empieza en PAGE_HEIGHT - 60 = 732pt) — no mueve ningún elemento ya
+     * existente del layout.
+     */
+    private fun drawValidationInfo(canvas: Canvas, diagnostic: DiagnosticEntity) {
+        val titlePaint = Paint().apply { color = TEXT_COLOR; textSize = 10.5f; typeface = Typeface.DEFAULT_BOLD; isAntiAlias = true }
+        val infoPaint = Paint().apply { color = TEXT_COLOR; textSize = 9.5f; isAntiAlias = true }
+
+        var top = 622f
+        canvas.drawText("Validación del administrador", 36f, top, titlePaint)
+        top += 16f
+
+        diagnostic.validadoPorNombre?.let {
+            canvas.drawText("Validado por: $it", 36f, top, infoPaint)
+            top += 14f
+        }
+        diagnostic.fechaValidacion?.let {
+            val fechaStr = SimpleDateFormat("dd/MM/yyyy", Locale("es", "MX")).format(Date(it))
+            canvas.drawText("Fecha de validación: $fechaStr", 36f, top, infoPaint)
+            top += 14f
+        }
+        if (!diagnostic.observacionesAdmin.isNullOrBlank()) {
+            canvas.drawText("Observaciones: ${diagnostic.observacionesAdmin}", 36f, top, infoPaint)
         }
     }
 
