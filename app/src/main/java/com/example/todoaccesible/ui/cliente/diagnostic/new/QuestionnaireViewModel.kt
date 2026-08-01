@@ -31,7 +31,6 @@ data class QuestionnaireUiState(
     val currentAnswerValue: AnswerValue? = null,
     val currentComentario: String = "",
     val currentPhotos: List<PhotoItem> = emptyList(),
-    val showSubmitConfirm: Boolean = false,
     val showDiscardConfirm: Boolean = false,
     val photoPendingDelete: PhotoItem? = null
 ) {
@@ -62,7 +61,6 @@ class QuestionnaireViewModel(
 
     /** Última pregunta visitada por cada sección, para volver exactamente ahí al cambiar de categoría. */
     private val lastIndexBySection = mutableMapOf<String, Int>()
-    private val _showSubmitConfirm = MutableStateFlow(false)
     private val _showDiscardConfirm = MutableStateFlow(false)
     private val _photoPendingDelete = MutableStateFlow<PhotoItem?>(null)
 
@@ -127,7 +125,6 @@ class QuestionnaireViewModel(
             currentAnswerValue = qa.answer?.valor,
             currentComentario = qa.answer?.comentario.orEmpty(),
             currentPhotos = photos,
-            showSubmitConfirm = _showSubmitConfirm.value,
             showDiscardConfirm = _showDiscardConfirm.value,
             photoPendingDelete = _photoPendingDelete.value
         )
@@ -262,27 +259,24 @@ class QuestionnaireViewModel(
         dismissQuestionList()
     }
 
-    fun requestSubmit() {
+    /**
+     * Al terminar la última pregunta: si aún faltan respuestas en cualquier
+     * categoría, avisa y no navega. Si ya están todas contestadas, va directo
+     * al resumen (sin enviar el diagnóstico todavía; eso lo hace el usuario
+     * explícitamente con "Enviar diagnóstico" desde esa pantalla).
+     */
+    fun goToSummary(onSummary: () -> Unit) {
         if (currentQA.value.answer?.valor == null) return
         viewModelScope.launch {
             val unanswered = diagnosticRepository.countUnanswered(diagnosticId)
             if (unanswered > 0) {
-                _submitBlockedMessage.value = "Debes responder todas las preguntas antes de finalizar el diagnóstico. Aún tienes preguntas pendientes en una o más categorías."
+                _submitBlockedMessage.value = "Debes responder todas las preguntas antes de ir al resumen. Aún tienes preguntas pendientes en una o más categorías."
             } else {
-                _showSubmitConfirm.value = true
+                onSummary()
             }
         }
     }
-    fun dismissSubmit() { _showSubmitConfirm.value = false }
     fun dismissSubmitBlocked() { _submitBlockedMessage.value = null }
-
-    fun confirmSubmit(onSubmitted: () -> Unit) {
-        viewModelScope.launch {
-            diagnosticRepository.submit(diagnosticId)
-            _showSubmitConfirm.value = false
-            onSubmitted()
-        }
-    }
 
     fun requestDiscard() { _showDiscardConfirm.value = true }
     fun dismissDiscard() { _showDiscardConfirm.value = false }

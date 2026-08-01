@@ -26,14 +26,17 @@ data class DiagnosticResultUiState(
     val diagnostic: DiagnosticEntity? = null,
     val scorecard: ScorecardResult? = null,
     val exporting: Boolean = false,
-    val exportError: String? = null
+    val exportError: String? = null,
+    val submitting: Boolean = false,
+    val showDiscardConfirm: Boolean = false
 )
 
 /**
- * Pantalla mostrada inmediatamente después de "Finalizar diagnóstico" (RF:
- * flujo post-envío). El diagnóstico ya fue guardado y enviado a revisión por
- * `QuestionnaireViewModel.confirmSubmit` antes de llegar aquí; esta pantalla
- * solo muestra el resultado preliminar y permite descargar PDF/Excel.
+ * Pantalla "Resumen del diagnóstico": se muestra al terminar de contestar
+ * las 187 preguntas (RF: flujo post-cuestionario), pero el diagnóstico
+ * todavía NO se envía a revisión en este punto. Es un resultado automático
+ * y preliminar; solo se envía al administrador cuando el usuario confirma
+ * explícitamente con "Enviar diagnóstico" (ver [submitDiagnostic]).
  */
 class DiagnosticResultViewModel(
     private val diagnosticId: Long,
@@ -49,6 +52,27 @@ class DiagnosticResultViewModel(
             val diagnostic = diagnosticRepository.getById(diagnosticId)
             val scorecard = diagnosticRepository.recalculateScore(diagnosticId)
             _uiState.value = _uiState.value.copy(loading = false, diagnostic = diagnostic, scorecard = scorecard)
+        }
+    }
+
+    /** Envía el diagnóstico a revisión: lo marca pendiente y notifica a los administradores. */
+    fun submitDiagnostic(onSubmitted: () -> Unit) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(submitting = true)
+            diagnosticRepository.submit(diagnosticId)
+            _uiState.value = _uiState.value.copy(submitting = false)
+            onSubmitted()
+        }
+    }
+
+    fun requestDiscard() { _uiState.value = _uiState.value.copy(showDiscardConfirm = true) }
+    fun dismissDiscard() { _uiState.value = _uiState.value.copy(showDiscardConfirm = false) }
+
+    fun confirmDiscard(onDiscarded: () -> Unit) {
+        viewModelScope.launch {
+            diagnosticRepository.discardDraft(diagnosticId)
+            _uiState.value = _uiState.value.copy(showDiscardConfirm = false)
+            onDiscarded()
         }
     }
 

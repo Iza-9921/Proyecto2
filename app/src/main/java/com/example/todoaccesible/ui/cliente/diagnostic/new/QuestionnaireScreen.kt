@@ -48,7 +48,7 @@ import com.example.todoaccesible.data.model.Credito
 fun QuestionnaireScreen(
     viewModel: QuestionnaireViewModel,
     onNavigateBack: () -> Unit,
-    onSubmitted: (Long) -> Unit,
+    onGoToSummary: (Long) -> Unit,
     diagnosticId: Long
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -159,23 +159,19 @@ fun QuestionnaireScreen(
                     modifier = Modifier.weight(1f)
                 )
                 BigTouchButton(
-                    text = if (uiState.isLastQuestion) "Finalizar" else "Siguiente",
+                    text = if (uiState.isLastQuestion) "Ir al resumen" else "Siguiente",
                     enabled = uiState.canAdvance,
-                    onClick = { if (uiState.isLastQuestion) viewModel.requestSubmit() else viewModel.nextQuestion() },
+                    onClick = {
+                        if (uiState.isLastQuestion) {
+                            viewModel.goToSummary { onGoToSummary(diagnosticId) }
+                        } else {
+                            viewModel.nextQuestion()
+                        }
+                    },
                     modifier = Modifier.weight(1f)
                 )
             }
         }
-    }
-
-    if (uiState.showSubmitConfirm) {
-        ConfirmDialog(
-            title = "Enviar cuestionario",
-            message = "¿Enviar el diagnóstico para revisión? Ya no podrás editar las respuestas.",
-            confirmLabel = "Enviar",
-            onConfirm = { viewModel.confirmSubmit { onSubmitted(diagnosticId) } },
-            onDismiss = viewModel::dismissSubmit
-        )
     }
 
     if (uiState.showDiscardConfirm) {

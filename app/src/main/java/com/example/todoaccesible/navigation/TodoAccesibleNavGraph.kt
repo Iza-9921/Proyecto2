@@ -149,10 +149,10 @@ fun TodoAccesibleNavGraph(
                 onNavigateBack = {
                     navController.navigate(Routes.ClienteDashboard.route) { popUpTo(Routes.ClienteDashboard.route) { inclusive = true } }
                 },
-                onSubmitted = { id ->
-                    navController.navigate(Routes.DiagnosticResult.build(id)) {
-                        popUpTo(Routes.ClienteDashboard.route)
-                    }
+                onGoToSummary = { id ->
+                    // Sin popUpTo: el cuestionario se queda en el backstack para
+                    // que "Anterior" en el resumen pueda volver a él.
+                    navController.navigate(Routes.DiagnosticResult.build(id))
                 }
             )
         }
@@ -171,16 +171,12 @@ fun TodoAccesibleNavGraph(
             )
             DiagnosticResultScreen(
                 viewModel = viewModel,
-                onFinalizar = {
-                    android.util.Log.d("DiagnosticResultScreen", "onFinalizar callback ejecutandose, currentDestination=${navController.currentDestination?.route}")
-                    try {
-                        navController.navigate(Routes.ClienteDashboard.route) {
-                            popUpTo(0)
-                        }
-                        android.util.Log.d("DiagnosticResultScreen", "navigate() OK, nuevo destino=${navController.currentDestination?.route}")
-                    } catch (e: Exception) {
-                        android.util.Log.e("DiagnosticResultScreen", "navigate() fallo", e)
-                    }
+                onBack = { navController.popBackStack() },
+                onSubmitted = {
+                    navController.navigate(Routes.ClienteDashboard.route) { popUpTo(0) }
+                },
+                onDiscarded = {
+                    navController.navigate(Routes.ClienteDashboard.route) { popUpTo(0) }
                 }
             )
         }
