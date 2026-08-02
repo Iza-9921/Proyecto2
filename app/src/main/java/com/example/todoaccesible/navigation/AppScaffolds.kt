@@ -28,7 +28,7 @@ private val adminItems = listOf(
     BottomItem(Routes.AdminDashboard.route, "Panel", Icons.Filled.Dashboard),
     BottomItem(Routes.AdminPending.route, "Diagnósticos", Icons.Filled.Assignment),
     BottomItem(Routes.AdminUsers.route, "Usuarios", Icons.Filled.Group),
-    BottomItem(Routes.AdminQuestions.route, "Preguntas", Icons.Filled.Help),
+    BottomItem(Routes.AdminQuestions.route, "Cuestionario", Icons.Filled.Help),
     BottomItem(Routes.AdminCompare.route, "Comparar", Icons.Filled.Compare),
     BottomItem(Routes.Notifications.route, "Notificaciones", Icons.Filled.Notifications)
 )

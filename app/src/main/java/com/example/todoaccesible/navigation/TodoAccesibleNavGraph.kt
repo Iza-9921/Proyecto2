@@ -20,8 +20,11 @@ import com.example.todoaccesible.ui.admin.dashboard.AdminDashboardScreen
 import com.example.todoaccesible.ui.admin.dashboard.AdminDashboardViewModel
 import com.example.todoaccesible.ui.admin.pending.AdminPendingScreen
 import com.example.todoaccesible.ui.admin.pending.AdminPendingViewModel
-import com.example.todoaccesible.ui.admin.questions.QuestionCatalogScreen
+import com.example.todoaccesible.ui.admin.questions.CategoryManagementViewModel
+import com.example.todoaccesible.ui.admin.questions.CategoryQuestionsScreen
+import com.example.todoaccesible.ui.admin.questions.CategoryQuestionsViewModel
 import com.example.todoaccesible.ui.admin.questions.QuestionCatalogViewModel
+import com.example.todoaccesible.ui.admin.questions.QuestionManagementScreen
 import com.example.todoaccesible.ui.admin.review.AdminReviewScreen
 import com.example.todoaccesible.ui.admin.review.AdminReviewViewModel
 import com.example.todoaccesible.ui.admin.users.UserManagementScreen
@@ -165,7 +168,7 @@ fun TodoAccesibleNavGraph(
             val viewModel: DiagnosticResultViewModel = viewModel(
                 factory = viewModelFactory {
                     initializer {
-                        DiagnosticResultViewModel(diagnosticId, container.diagnosticRepository, container.questionCatalogRepository)
+                        DiagnosticResultViewModel(diagnosticId, container.diagnosticRepository)
                     }
                 }
             )
@@ -243,12 +246,34 @@ fun TodoAccesibleNavGraph(
         }
 
         composable(Routes.AdminQuestions.route) {
-            val viewModel: QuestionCatalogViewModel = viewModel(
+            val questionViewModel: QuestionCatalogViewModel = viewModel(
                 factory = viewModelFactory { initializer { QuestionCatalogViewModel(container.questionCatalogRepository) } }
             )
+            val categoryViewModel: CategoryManagementViewModel = viewModel(
+                factory = viewModelFactory { initializer { CategoryManagementViewModel(container.questionCatalogRepository) } }
+            )
             AdminShell(navController, currentRoute) {
-                QuestionCatalogScreen(viewModel = viewModel)
+                QuestionManagementScreen(
+                    categoryViewModel = categoryViewModel,
+                    questionViewModel = questionViewModel,
+                    onOpenCategory = { sectionId -> navController.navigate(Routes.AdminCategoryQuestions.build(sectionId)) }
+                )
             }
+        }
+
+        composable(
+            route = Routes.AdminCategoryQuestions.route,
+            arguments = listOf(navArgument(Routes.ARG_SECTION_ID) { type = NavType.StringType })
+        ) { backStackEntry ->
+            val sectionId = backStackEntry.arguments?.getString(Routes.ARG_SECTION_ID) ?: return@composable
+            val viewModel: CategoryQuestionsViewModel = viewModel(
+                factory = viewModelFactory { initializer { CategoryQuestionsViewModel(sectionId, container.questionCatalogRepository) } }
+            )
+            CategoryQuestionsScreen(
+                sectionId = sectionId,
+                viewModel = viewModel,
+                onNavigateBack = { navController.popBackStack() }
+            )
         }
 
         composable(Routes.AdminPending.route) {

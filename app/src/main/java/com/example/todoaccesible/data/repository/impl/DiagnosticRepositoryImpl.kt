@@ -203,8 +203,8 @@ class DiagnosticRepositoryImpl(
 
     override suspend fun recalculateScore(diagnosticId: Long): ScorecardResult? {
         val diagnostic = diagnostics.snapshot.find { it.id == diagnosticId } ?: return null
-        val questions = questionCatalogRepository.getAllQuestions()
-        val sectionNameById = questionCatalogRepository.getAllSections().associate { it.id to it.nombre }
+        val questions = questionCatalogRepository.getActiveQuestions()
+        val sectionNameById = questionCatalogRepository.getActiveSections().associate { it.id to it.nombre }
         val scorecardQuestions = questions.map {
             ScorecardQuestion(
                 codigo = it.codigo,
@@ -228,7 +228,7 @@ class DiagnosticRepositoryImpl(
     }
 
     override suspend fun countUnanswered(diagnosticId: Long): Int {
-        val totalQuestions = questionCatalogRepository.getAllQuestions().size
+        val totalQuestions = questionCatalogRepository.getActiveQuestions().size
         val answeredCount = answers.snapshot.count { it.diagnosticId == diagnosticId && it.valor != null }
         return (totalQuestions - answeredCount).coerceAtLeast(0)
     }
@@ -306,8 +306,8 @@ class DiagnosticRepositoryImpl(
 
     /** Calcula (sin persistir ni notificar) el resultado basado en la validación por pregunta del admin. */
     override suspend fun getOfficialScore(diagnosticId: Long): ScorecardResult? {
-        val questions = questionCatalogRepository.getAllQuestions()
-        val sectionNameById = questionCatalogRepository.getAllSections().associate { it.id to it.nombre }
+        val questions = questionCatalogRepository.getActiveQuestions()
+        val sectionNameById = questionCatalogRepository.getActiveSections().associate { it.id to it.nombre }
         val scorecardQuestions = questions.map {
             ScorecardQuestion(
                 codigo = it.codigo,

@@ -36,35 +36,41 @@ import com.example.todoaccesible.core.theme.RequiredNavy
 
 @Composable
 fun QuestionCatalogScreen(viewModel: QuestionCatalogViewModel) {
+    Scaffold(topBar = { TopAppBar(title = { Text("Catálogo de preguntas") }) }) { innerPadding ->
+        QuestionCatalogContent(viewModel = viewModel, modifier = Modifier.padding(innerPadding))
+    }
+}
+
+/** Contenido de la pestaña "Preguntas" del módulo Gestión del cuestionario (sin Scaffold propio, para poder embeberse en un TabRow). */
+@Composable
+fun QuestionCatalogContent(viewModel: QuestionCatalogViewModel, modifier: Modifier = Modifier) {
     val uiState by viewModel.uiState.collectAsState()
     val sectionNameById = remember(uiState.sections) { uiState.sections.associate { it.id to it.nombre } }
 
-    Scaffold(topBar = { TopAppBar(title = { Text("Catálogo de preguntas") }) }) { innerPadding ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(innerPadding),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(uiState.questions, key = { it.codigo }) { question ->
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    onClick = { viewModel.startEditing(question) }
-                ) {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(question.codigo, style = MaterialTheme.typography.labelLarge)
-                            Chip(
-                                label = if (question.credito == Credito.REQUIRED) "Required" else "Plus",
-                                color = if (question.credito == Credito.REQUIRED) RequiredNavy else PlusFuchsia
-                            )
-                        }
-                        Text(question.concepto, style = MaterialTheme.typography.bodyLarge)
-                        Text(
-                            "Sección: ${sectionNameById[question.seccionId] ?: question.seccionId} · Admite foto: ${if (question.admiteFoto) "Sí" else "No"}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        items(uiState.questions, key = { it.codigo }) { question ->
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                onClick = { viewModel.startEditing(question) }
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(question.codigo, style = MaterialTheme.typography.labelLarge)
+                        Chip(
+                            label = if (question.credito == Credito.REQUIRED) "Required" else "Plus",
+                            color = if (question.credito == Credito.REQUIRED) RequiredNavy else PlusFuchsia
                         )
                     }
+                    Text(question.concepto, style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        "Sección: ${sectionNameById[question.seccionId] ?: question.seccionId} · Admite foto: ${if (question.admiteFoto) "Sí" else "No"}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }

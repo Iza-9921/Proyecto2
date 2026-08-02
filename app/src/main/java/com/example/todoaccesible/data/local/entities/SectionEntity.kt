@@ -1,8 +1,10 @@
 package com.example.todoaccesible.data.local.entities
 
-/** Las 8 secciones fijas del Scorecard v2.6 (id "1".."8"). */
+/** Categoría del cuestionario (las 8 originales del Scorecard v2.6 más las que cree el admin). */
 data class SectionEntity(
     val id: String,
     val nombre: String,
-    val orden: Int
+    val orden: Int,
+    /** Las categorías inactivas se excluyen del cuestionario que responde el cliente y del scorecard, pero se conservan para no perder el historial ya capturado. */
+    val activa: Boolean = true
 )

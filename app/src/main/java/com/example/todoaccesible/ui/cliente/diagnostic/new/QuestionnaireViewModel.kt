@@ -113,27 +113,43 @@ class QuestionnaireViewModel(
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val uiState: StateFlow<QuestionnaireUiState> = combine(
+    private data class QuestionContent(
+        val sections: List<SectionEntity>,
+        val questions: List<QuestionEntity>,
+        val index: Int,
+        val qa: CurrentQA,
+        val photos: List<PhotoItem>
+    )
+
+    private val questionContent: StateFlow<QuestionContent> = combine(
         _sections, _questions, _currentIndex, currentQA, currentPhotos
     ) { sections, questions, index, qa, photos ->
+        QuestionContent(sections, questions, index, qa, photos)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), QuestionContent(emptyList(), emptyList(), 0, CurrentQA(null, null), emptyList()))
+
+    /** Combina el contenido de la pregunta con los diálogos (descartar / borrar foto): ambos deben
+     * poder disparar una recomposición aunque no cambie ninguno de los flows de [questionContent]. */
+    val uiState: StateFlow<QuestionnaireUiState> = combine(
+        questionContent, _showDiscardConfirm, _photoPendingDelete
+    ) { content, showDiscardConfirm, photoPendingDelete ->
         QuestionnaireUiState(
-            loading = questions.isEmpty(),
-            sections = sections,
-            totalQuestions = questions.size,
-            currentIndex = index,
-            currentQuestion = qa.question,
-            currentAnswerValue = qa.answer?.valor,
-            currentComentario = qa.answer?.comentario.orEmpty(),
-            currentPhotos = photos,
-            showDiscardConfirm = _showDiscardConfirm.value,
-            photoPendingDelete = _photoPendingDelete.value
+            loading = content.questions.isEmpty(),
+            sections = content.sections,
+            totalQuestions = content.questions.size,
+            currentIndex = content.index,
+            currentQuestion = content.qa.question,
+            currentAnswerValue = content.qa.answer?.valor,
+            currentComentario = content.qa.answer?.comentario.orEmpty(),
+            currentPhotos = content.photos,
+            showDiscardConfirm = showDiscardConfirm,
+            photoPendingDelete = photoPendingDelete
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), QuestionnaireUiState())
 
     init {
         viewModelScope.launch {
-            _sections.value = questionCatalogRepository.getAllSections()
-            _questions.value = questionCatalogRepository.getAllQuestions()
+            _sections.value = questionCatalogRepository.getActiveSections()
+            _questions.value = questionCatalogRepository.getActiveQuestions()
             moveTo(_currentIndex.value)
         }
     }
