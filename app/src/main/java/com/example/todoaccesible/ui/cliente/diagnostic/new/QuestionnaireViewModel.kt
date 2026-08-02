@@ -269,8 +269,25 @@ class QuestionnaireViewModel(
     fun openQuestionList() { _showQuestionList.value = true }
     fun dismissQuestionList() { _showQuestionList.value = false }
 
-    /** Navegación rápida desde el panel "Ver preguntas": va directo a la pregunta elegida sin perder respuestas ni fotos. */
+    /**
+     * Navegación rápida desde el panel "Ver preguntas": solo permite ir a una pregunta ya
+     * respondida (para revisarla o editarla) o a la siguiente pendiente que le corresponde
+     * dentro de su categoría. Bloquea saltos que se adelanten a preguntas anteriores sin
+     * responder, respetando siempre el orden del cuestionario.
+     */
     fun goToQuestion(index: Int) {
+        val questions = _questions.value
+        val target = questions.getOrNull(index) ?: return
+        val answers = answersByCode.value
+        val alreadyAnswered = answers[target.codigo]?.valor != null
+        if (!alreadyAnswered) {
+            val sectionQuestions = questions.withIndex().filter { it.value.seccionId == target.seccionId }
+            val firstPendingIndex = sectionQuestions.firstOrNull { answers[it.value.codigo]?.valor == null }?.index
+            if (index != firstPendingIndex) {
+                _submitBlockedMessage.value = "Debes responder las preguntas anteriores antes de continuar."
+                return
+            }
+        }
         moveTo(index)
         dismissQuestionList()
     }
