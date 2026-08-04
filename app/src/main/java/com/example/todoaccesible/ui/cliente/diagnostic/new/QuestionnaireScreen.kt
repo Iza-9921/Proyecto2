@@ -29,6 +29,9 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
@@ -39,7 +42,6 @@ import com.example.todoaccesible.core.designsystem.BigTouchButton
 import com.example.todoaccesible.core.designsystem.BigTouchOutlinedButton
 import com.example.todoaccesible.core.designsystem.ConfirmDialog
 import com.example.todoaccesible.core.designsystem.PhotoPickerRow
-import com.example.todoaccesible.core.designsystem.SectionPills
 import com.example.todoaccesible.core.designsystem.answerValueColor
 import com.example.todoaccesible.data.model.AnswerValue
 import com.example.todoaccesible.data.model.Credito
@@ -56,6 +58,7 @@ fun QuestionnaireScreen(
     val submitBlockedMessage by viewModel.submitBlockedMessage.collectAsState()
     val showQuestionList by viewModel.showQuestionList.collectAsState()
     val currentSectionQuestions by viewModel.currentSectionQuestions.collectAsState()
+    var showSectionList by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -79,19 +82,15 @@ fun QuestionnaireScreen(
         val question = uiState.currentQuestion!!
 
         Column(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
-            SectionPills(
-                sections = uiState.sections,
-                currentSectionId = question.seccionId,
-                onSectionSelected = { viewModel.jumpToSection(it.id) },
-                sectionCompletion = sectionCompletion
-            )
-
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.End
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
+                TextButton(onClick = { showSectionList = true }) {
+                    Text("Categorías")
+                }
                 TextButton(onClick = viewModel::openQuestionList) {
                     Text("Ver preguntas")
                 }
@@ -205,6 +204,33 @@ fun QuestionnaireScreen(
                 TextButton(onClick = viewModel::dismissSubmitBlocked) { Text("Entendido") }
             }
         )
+    }
+
+    if (showSectionList) {
+        ModalBottomSheet(onDismissRequest = { showSectionList = false }) {
+            LazyColumn(modifier = Modifier.fillMaxWidth()) {
+                items(uiState.sections, key = { it.id }) { section ->
+                    val selected = section.id == uiState.currentQuestion?.seccionId
+                    val completada = sectionCompletion[section.id] == true
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                viewModel.jumpToSection(section.id)
+                                showSectionList = false
+                            }
+                            .padding(horizontal = 24.dp, vertical = 12.dp)
+                    ) {
+                        Text(
+                            text = "${if (completada) "🟢" else "🟡"} ${section.id}. ${section.nombre}",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                    HorizontalDivider()
+                }
+            }
+        }
     }
 
     if (showQuestionList) {

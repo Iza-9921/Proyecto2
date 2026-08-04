@@ -77,7 +77,10 @@ fun ProjectInfoScreen(
                 responsable = uiState.responsable,
                 onResponsableChange = viewModel::onResponsableChange,
                 revision = uiState.revision,
-                onRevisionChange = viewModel::onRevisionChange
+                onRevisionChange = viewModel::onRevisionChange,
+                logoEmpresaUri = uiState.logoEmpresaUri,
+                onLogoEmpresaChange = viewModel::onLogoEmpresaChange,
+                showRevision = false
             )
 
             Row(

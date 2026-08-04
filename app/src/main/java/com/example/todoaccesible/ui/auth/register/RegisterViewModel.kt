@@ -31,6 +31,7 @@ data class RegisterUiState(
     val fechaEvaluacion: Long? = System.currentTimeMillis(),
     val responsable: String = "",
     val revision: String = "1",
+    val logoEmpresaUri: String? = null,
     val loading: Boolean = false,
     val error: String? = null,
     /** Cuenta creada, pero el cliente no tiene cupo de diagnósticos asignado por el administrador. */
@@ -93,6 +94,7 @@ class RegisterViewModel(
     fun onFechaEvaluacionChange(value: Long) { _uiState.value = _uiState.value.copy(fechaEvaluacion = value) }
     fun onResponsableChange(value: String) { _uiState.value = _uiState.value.copy(responsable = value) }
     fun onRevisionChange(value: String) { _uiState.value = _uiState.value.copy(revision = value) }
+    fun onLogoEmpresaChange(value: String?) { _uiState.value = _uiState.value.copy(logoEmpresaUri = value) }
 
     /** Crea la cuenta, guarda los datos de la empresa en el diagnóstico borrador y navega al cuestionario. */
     fun register(onSuccess: (diagnosticId: Long) -> Unit) {
@@ -113,7 +115,8 @@ class RegisterViewModel(
                         entidadFederativa = state.entidadFederativa,
                         ciudad = state.ciudad,
                         tipoInmueble = state.tipoInmueble,
-                        fechaEvaluacion = state.fechaEvaluacion
+                        fechaEvaluacion = state.fechaEvaluacion,
+                        logoEmpresaUri = state.logoEmpresaUri
                     )
                     val disponibles = userRepository.observeById(result.session.userId).firstOrNull()?.diagnosticosDisponibles
                     if (disponibles != null && disponibles <= 0) {

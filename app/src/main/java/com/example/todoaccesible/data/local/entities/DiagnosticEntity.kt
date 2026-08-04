@@ -25,6 +25,8 @@ data class DiagnosticEntity(
     val ciudad: String = "",
     val tipoInmueble: String = "",
     val fechaEvaluacion: Long? = null,
+    // Logotipo de la empresa del cliente (URI de contenido elegida por el usuario), se dibuja en el PDF.
+    val logoEmpresaUri: String? = null,
     // Resultado oficial: se llena solo cuando el administrador finaliza la
     // evaluación (basado en QuestionReviewEntity, no en las respuestas del
     // cliente). Separado de nivel/requeridoPct/plusPct para que el
