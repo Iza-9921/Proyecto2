@@ -20,6 +20,7 @@ data class ProjectInfoUiState(
     val fechaEvaluacion: Long? = null,
     val responsable: String = "",
     val revision: String = "1",
+    val logoEmpresaUri: String? = null,
     val loading: Boolean = true
 ) {
     val ciudadesDisponibles: List<String> get() = MexicoLocations.ciudadesDe(entidadFederativa)
@@ -48,6 +49,7 @@ class ProjectInfoViewModel(
                 fechaEvaluacion = draft.fechaEvaluacion ?: System.currentTimeMillis(),
                 responsable = draft.responsable,
                 revision = draft.revision,
+                logoEmpresaUri = draft.logoEmpresaUri,
                 loading = false
             )
         }
@@ -70,6 +72,7 @@ class ProjectInfoViewModel(
     fun onFechaEvaluacionChange(value: Long) { _uiState.value = _uiState.value.copy(fechaEvaluacion = value) }
     fun onResponsableChange(value: String) { _uiState.value = _uiState.value.copy(responsable = value) }
     fun onRevisionChange(value: String) { _uiState.value = _uiState.value.copy(revision = value) }
+    fun onLogoEmpresaChange(value: String?) { _uiState.value = _uiState.value.copy(logoEmpresaUri = value) }
 
     fun continueToQuestionnaire(onReady: (Long) -> Unit) {
         val state = _uiState.value
@@ -86,7 +89,8 @@ class ProjectInfoViewModel(
                 entidadFederativa = state.entidadFederativa,
                 ciudad = state.ciudad,
                 tipoInmueble = state.tipoInmueble,
-                fechaEvaluacion = state.fechaEvaluacion
+                fechaEvaluacion = state.fechaEvaluacion,
+                logoEmpresaUri = state.logoEmpresaUri
             )
             onReady(id)
         }

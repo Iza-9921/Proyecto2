@@ -1,14 +1,25 @@
 package com.example.todoaccesible.core.designsystem
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -18,8 +29,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
 import com.example.todoaccesible.data.local.seed.MexicoLocations
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -66,10 +80,13 @@ fun EmpresaInfoFields(
     onResponsableChange: (String) -> Unit,
     revision: String,
     onRevisionChange: (String) -> Unit,
+    logoEmpresaUri: String?,
+    onLogoEmpresaChange: (String?) -> Unit,
     projectNameLabel: String = "Nombre de la empresa",
     showRevision: Boolean = true
 ) {
     var showDatePicker by remember { mutableStateOf(false) }
+    var otroTipoInmueble by remember { mutableStateOf(tipoInmueble.isNotBlank() && tipoInmueble !in TiposDeInmueble) }
 
     OutlinedTextField(
         value = projectName,
@@ -79,6 +96,7 @@ fun EmpresaInfoFields(
         singleLine = true,
         modifier = Modifier.fillMaxWidth()
     )
+    LogoEmpresaPicker(logoUri = logoEmpresaUri, onLogoChange = onLogoEmpresaChange)
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         OutlinedTextField(
             value = clienteNombre,
@@ -128,8 +146,16 @@ fun EmpresaInfoFields(
         DropdownField(
             label = "Tipo de inmueble",
             options = TiposDeInmueble,
-            selected = tipoInmueble,
-            onSelected = onTipoInmuebleChange,
+            selected = if (otroTipoInmueble) "Otro" else tipoInmueble,
+            onSelected = { option ->
+                if (option == "Otro") {
+                    otroTipoInmueble = true
+                    onTipoInmuebleChange("")
+                } else {
+                    otroTipoInmueble = false
+                    onTipoInmuebleChange(option)
+                }
+            },
             modifier = Modifier.weight(1f)
         )
         OutlinedTextField(
@@ -143,6 +169,16 @@ fun EmpresaInfoFields(
                 }
             },
             modifier = Modifier.weight(1f)
+        )
+    }
+    if (otroTipoInmueble) {
+        OutlinedTextField(
+            value = tipoInmueble,
+            onValueChange = onTipoInmuebleChange,
+            label = { Text("Especifica el tipo de inmueble") },
+            placeholder = { Text("Ej: Gimnasio") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
         )
     }
     OutlinedTextField(
@@ -178,6 +214,49 @@ fun EmpresaInfoFields(
             }
         ) {
             DatePicker(state = datePickerState)
+        }
+    }
+}
+
+/**
+ * Selector del logotipo de la empresa del cliente (opcional): se guarda como
+ * URI de contenido (igual que las fotos de evidencia) y se dibuja en el
+ * scorecard PDF junto al encabezado.
+ */
+@Composable
+private fun LogoEmpresaPicker(logoUri: String?, onLogoChange: (String?) -> Unit) {
+    val galleryLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia()
+    ) { uri: Uri? -> uri?.let { onLogoChange(it.toString()) } }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (logoUri != null) {
+            AsyncImage(
+                model = logoUri,
+                contentDescription = "Logotipo de la empresa",
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(RoundedCornerShape(8.dp))
+            )
+        }
+        OutlinedButton(
+            onClick = {
+                galleryLauncher.launch(
+                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                )
+            }
+        ) {
+            Icon(Icons.Filled.Upload, contentDescription = null, modifier = Modifier.size(18.dp))
+            Text(if (logoUri != null) "Cambiar logotipo" else "Subir logotipo de la empresa", modifier = Modifier.padding(start = 8.dp))
+        }
+        if (logoUri != null) {
+            IconButton(onClick = { onLogoChange(null) }) {
+                Icon(Icons.Filled.Close, contentDescription = "Quitar logotipo", tint = MaterialTheme.colorScheme.error)
+            }
         }
     }
 }

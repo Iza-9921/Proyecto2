@@ -24,8 +24,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 class DiagnosticRepositoryImpl(
-    private val diagnostics: InMemoryTable<DiagnosticEntity> = InMemoryTable(listOf(demoSeed.first)),
-    private val answers: InMemoryTable<AnswerEntity> = InMemoryTable(demoSeed.second),
+    private val diagnostics: InMemoryTable<DiagnosticEntity> = InMemoryTable(listOf(demoSeed.first, demoDraftSeed.first)),
+    private val answers: InMemoryTable<AnswerEntity> = InMemoryTable(demoSeed.second + demoDraftSeed.second),
     private val photos: InMemoryTable<PhotoEntity> = InMemoryTable(),
     private val questionCatalogRepository: QuestionCatalogRepository,
     private val notificationRepository: NotificationRepository,
@@ -111,6 +111,49 @@ class DiagnosticRepositoryImpl(
                 )
             }
         }
+
+        /**
+         * Borrador sembrado para el cliente demo con 180 de las 187 preguntas ya
+         * contestadas (las 7 restantes repartidas entre secciones distintas quedan
+         * pendientes). Permite probar de inmediato el flujo de "continuar
+         * cuestionario" (saltar entre categorías, terminar las últimas preguntas,
+         * enviar a revisión) sin tener que responder el cuestionario completo a mano.
+         */
+        private val indicesSinContestar = setOf(20, 45, 70, 95, 120, 145, 170)
+
+        private val demoDraftSeed: Pair<DiagnosticEntity, List<AnswerEntity>> by lazy {
+            val questions = QuestionCatalogSeeder.questionEntities()
+
+            val diagnostic = DiagnosticEntity(
+                id = 2,
+                clienteId = UserRepositoryImpl.DEMO_CLIENT_ID,
+                projectName = "Sucursal Centro",
+                ubicacion = "Calle Reforma 456",
+                responsable = "Cliente Demo",
+                revision = "1",
+                fechaCreacion = System.currentTimeMillis(),
+                estado = DiagnosticStatus.BORRADOR,
+                clienteNombre = "Cliente Demo",
+                telefono = "55 1234 5678",
+                entidadFederativa = "Ciudad de México",
+                ciudad = "Ciudad de México",
+                tipoInmueble = "Edificio de oficinas",
+                fechaEvaluacion = System.currentTimeMillis()
+            )
+            val draftAnswers = questions.mapIndexedNotNull { index, question ->
+                if (index in indicesSinContestar) {
+                    null
+                } else {
+                    AnswerEntity(
+                        id = 1000L + index,
+                        diagnosticId = diagnostic.id,
+                        questionCodigo = question.codigo,
+                        valor = AnswerValue.APROBADO
+                    )
+                }
+            }
+            diagnostic to draftAnswers
+        }
     }
 
     override suspend fun getOrCreateDraft(clienteId: Long): DiagnosticEntity {
@@ -142,7 +185,8 @@ class DiagnosticRepositoryImpl(
         entidadFederativa: String,
         ciudad: String,
         tipoInmueble: String,
-        fechaEvaluacion: Long?
+        fechaEvaluacion: Long?,
+        logoEmpresaUri: String?
     ) {
         diagnostics.mutate { list ->
             list.map {
@@ -157,7 +201,8 @@ class DiagnosticRepositoryImpl(
                         entidadFederativa = entidadFederativa,
                         ciudad = ciudad,
                         tipoInmueble = tipoInmueble,
-                        fechaEvaluacion = fechaEvaluacion
+                        fechaEvaluacion = fechaEvaluacion,
+                        logoEmpresaUri = logoEmpresaUri
                     )
                 } else it
             }

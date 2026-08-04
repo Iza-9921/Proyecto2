@@ -116,6 +116,8 @@ fun RegisterScreen(
                     onResponsableChange = viewModel::onResponsableChange,
                     revision = uiState.revision,
                     onRevisionChange = viewModel::onRevisionChange,
+                    logoEmpresaUri = uiState.logoEmpresaUri,
+                    onLogoEmpresaChange = viewModel::onLogoEmpresaChange,
                     showRevision = false
                 )
 

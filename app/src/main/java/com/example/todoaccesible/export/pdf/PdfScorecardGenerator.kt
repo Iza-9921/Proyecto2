@@ -1,6 +1,7 @@
 package com.example.todoaccesible.export.pdf
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
@@ -8,6 +9,7 @@ import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
+import android.net.Uri
 import com.example.todoaccesible.R
 import com.example.todoaccesible.data.local.entities.DiagnosticEntity
 import com.example.todoaccesible.data.model.Nivel
@@ -44,11 +46,12 @@ object PdfScorecardGenerator {
 
         drawHeader(context, canvas, diagnostic, esDefinitivo)
         drawSummaryBoxes(canvas, diagnostic, scorecard)
-        drawSectionGrid(canvas, scorecard.sections)
+        val gridBottom = drawSectionGrid(canvas, scorecard.sections)
+        var bottom = gridBottom + 14f
         if (esDefinitivo && diagnostic.fechaValidacion != null) {
-            drawValidationInfo(canvas, diagnostic)
+            bottom = drawValidationInfo(canvas, diagnostic, bottom) + 10f
         }
-        drawFooterLegend(canvas)
+        drawBadgesAndLegend(context, canvas, bottom)
 
         document.finishPage(page)
 
@@ -60,10 +63,23 @@ object PdfScorecardGenerator {
     }
 
     private fun drawHeader(context: Context, canvas: Canvas, diagnostic: DiagnosticEntity, esDefinitivo: Boolean) {
-        val logoBitmap = BitmapFactory.decodeResource(context.resources, R.drawable.logo_todo_accesible)
+        val logoBitmap = BitmapFactory.decodeResource(context.resources, R.drawable.logo_todo_accesible_pdf)
         val logoWidth = 90f
         val logoHeight = logoWidth * logoBitmap.height / logoBitmap.width
         canvas.drawBitmap(logoBitmap, null, RectF(36f, 28f, 36f + logoWidth, 28f + logoHeight), null)
+
+        decodeCompanyLogo(context, diagnostic.logoEmpresaUri)?.let { empresaLogo ->
+            val maxWidth = 90f
+            val maxHeight = 60f
+            var empresaWidth = maxWidth
+            var empresaHeight = empresaWidth * empresaLogo.height / empresaLogo.width
+            if (empresaHeight > maxHeight) {
+                empresaHeight = maxHeight
+                empresaWidth = empresaHeight * empresaLogo.width / empresaLogo.height
+            }
+            val right = PAGE_WIDTH - 36f
+            canvas.drawBitmap(empresaLogo, null, RectF(right - empresaWidth, 28f, right, 28f + empresaHeight), null)
+        }
 
         val titlePaint = Paint().apply {
             color = TEXT_COLOR
@@ -120,16 +136,19 @@ object PdfScorecardGenerator {
         canvas.drawText("Nivel alcanzado", nivelCenterX, boxRect.bottom - 8f, nivelCaptionPaint)
     }
 
-    private fun drawSectionGrid(canvas: Canvas, sections: List<SectionScore>) {
+    /** Devuelve la coordenada Y del borde inferior de la última fila, para poder acomodar el contenido siguiente. */
+    private fun drawSectionGrid(canvas: Canvas, sections: List<SectionScore>): Float {
         val startTop = 268f
         val columnWidth = (PAGE_WIDTH - 36f * 2 - 12f) / 2
-        val rowHeight = 78f
+        val rowHeight = 70f
+        val rowGap = 8f
+        var maxBottom = startTop
 
         sections.sortedBy { it.seccionId.toIntOrNull() ?: 0 }.forEachIndexed { index, section ->
             val column = index % 2
             val row = index / 2
             val left = 36f + column * (columnWidth + 12f)
-            val top = startTop + row * (rowHeight + 10f)
+            val top = startTop + row * (rowHeight + rowGap)
             val rect = RectF(left, top, left + columnWidth, top + rowHeight)
             drawRoundedCard(canvas, rect)
 
@@ -138,20 +157,18 @@ object PdfScorecardGenerator {
 
             drawCreditBar(canvas, "Required", section.required, rect.left + 10f, rect.top + 30f, rect.width() - 20f, REQUIRED_COLOR, compact = true)
             drawCreditBar(canvas, "Plus", section.plus, rect.left + 10f, rect.top + 54f, rect.width() - 20f, PLUS_COLOR, compact = true)
+
+            maxBottom = maxOf(maxBottom, rect.bottom)
         }
+        return maxBottom
     }
 
-    /**
-     * Datos de la validación oficial del admin, dibujados en el espacio ya
-     * libre entre el grid de secciones (termina ~610pt) y el pie de página
-     * (empieza en PAGE_HEIGHT - 60 = 732pt) — no mueve ningún elemento ya
-     * existente del layout.
-     */
-    private fun drawValidationInfo(canvas: Canvas, diagnostic: DiagnosticEntity) {
+    /** Datos de la validación oficial del admin. Devuelve la Y donde terminó de dibujar, para acomodar lo siguiente. */
+    private fun drawValidationInfo(canvas: Canvas, diagnostic: DiagnosticEntity, startTop: Float): Float {
         val titlePaint = Paint().apply { color = TEXT_COLOR; textSize = 10.5f; typeface = Typeface.DEFAULT_BOLD; isAntiAlias = true }
         val infoPaint = Paint().apply { color = TEXT_COLOR; textSize = 9.5f; isAntiAlias = true }
 
-        var top = 622f
+        var top = startTop + 12f
         canvas.drawText("Validación del administrador", 36f, top, titlePaint)
         top += 16f
 
@@ -166,20 +183,74 @@ object PdfScorecardGenerator {
         }
         if (!diagnostic.observacionesAdmin.isNullOrBlank()) {
             canvas.drawText("Observaciones: ${diagnostic.observacionesAdmin}", 36f, top, infoPaint)
+            top += 14f
         }
+        return top
     }
 
-    private fun drawFooterLegend(canvas: Canvas) {
-        val top = PAGE_HEIGHT - 60f
-        val paint = Paint().apply { color = MUTED_COLOR; textSize = 8f; isAntiAlias = true }
-        canvas.drawText(
-            "Niveles distintivo:  Plata 100% créditos Required · Oro 63% al 79% créditos Plus · Magenta 80% al 100% créditos Plus.",
-            36f, top, paint
+    /**
+     * Fila inferior con las tres insignias (Plata/Oro/Magenta) a la izquierda
+     * y la tarjeta "Niveles distintivo" a la derecha, replicando la portada
+     * de referencia.
+     */
+    private fun drawBadgesAndLegend(context: Context, canvas: Canvas, top: Float) {
+        val badgeSize = 56f
+        val badgeGap = 14f
+        val badges = listOf(
+            Triple(R.drawable.badge_plata, "Plata", nivelColorInt(Nivel.PLATA)),
+            Triple(R.drawable.badge_oro, "Oro", nivelColorInt(Nivel.ORO)),
+            Triple(R.drawable.badge_magenta, "Magenta", nivelColorInt(Nivel.MAGENTA))
         )
+        badges.forEachIndexed { index, (resId, label, accentColor) ->
+            val left = 36f + index * (badgeSize + badgeGap)
+            val bitmap = BitmapFactory.decodeResource(context.resources, resId)
+            canvas.drawBitmap(bitmap, null, RectF(left, top, left + badgeSize, top + badgeSize), null)
+            val captionPaint = Paint().apply {
+                color = accentColor
+                textSize = 8.5f
+                typeface = Typeface.DEFAULT_BOLD
+                textAlign = Paint.Align.CENTER
+                isAntiAlias = true
+            }
+            canvas.drawText(label, left + badgeSize / 2f, top + badgeSize + 12f, captionPaint)
+        }
+
+        val cardLeft = 250f
+        val cardRight = PAGE_WIDTH - 36f
+        val cardHeight = 76f
+        val cardRect = RectF(cardLeft, top, cardRight, top + cardHeight)
+        drawRoundedCard(canvas, cardRect)
+
+        val titlePaint = Paint().apply { color = TEXT_COLOR; textSize = 10f; typeface = Typeface.DEFAULT_BOLD; isAntiAlias = true }
+        canvas.drawText("Niveles distintivo:", cardLeft + 14f, top + 18f, titlePaint)
+
+        val labelPaint = Paint().apply { color = TEXT_COLOR; textSize = 9f; typeface = Typeface.DEFAULT_BOLD; isAntiAlias = true }
+        val descPaint = Paint().apply { color = TEXT_COLOR; textSize = 9f; isAntiAlias = true }
+        val rows = listOf(
+            "Plata" to "100% Créditos Required",
+            "Oro" to "63% al 79% Créditos Plus",
+            "Magenta" to "80% al 100% créditos Plus"
+        )
+        rows.forEachIndexed { index, (label, desc) ->
+            val y = top + 36f + index * 14f
+            canvas.drawText(label, cardLeft + 14f, y, labelPaint)
+            canvas.drawText(desc, cardLeft + 74f, y, descPaint)
+        }
+
+        val footnotePaint = Paint().apply { color = MUTED_COLOR; textSize = 7.5f; isAntiAlias = true }
         canvas.drawText(
             "Para Oro y Magenta se debe haber cumplido con el 100% de créditos Required.",
-            36f, top + 12f, paint
+            36f, top + cardHeight + 14f, footnotePaint
         )
+    }
+
+    private fun decodeCompanyLogo(context: Context, uriStr: String?): Bitmap? {
+        if (uriStr.isNullOrBlank()) return null
+        return try {
+            context.contentResolver.openInputStream(Uri.parse(uriStr))?.use { BitmapFactory.decodeStream(it) }
+        } catch (e: Exception) {
+            null
+        }
     }
 
     private fun drawRoundedCard(canvas: Canvas, rect: RectF) {
