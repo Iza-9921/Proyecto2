@@ -13,22 +13,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 
-/** Las 4 columnas del Kanban de admin. RECHAZADO se agrupa dentro de INFO_REQUERIDA. */
-enum class KanbanColumn(val label: String) {
-    PENDIENTES("Pendientes"),
-    EN_REVISION("En revisión"),
-    INFO_REQUERIDA("Info requerida"),
-    VALIDADOS("Validados")
-}
-
-fun DiagnosticStatus.kanbanColumn(): KanbanColumn = when (this) {
-    DiagnosticStatus.PENDIENTE -> KanbanColumn.PENDIENTES
-    DiagnosticStatus.EN_REVISION -> KanbanColumn.EN_REVISION
-    DiagnosticStatus.INFO_REQUERIDA, DiagnosticStatus.RECHAZADO -> KanbanColumn.INFO_REQUERIDA
-    DiagnosticStatus.VALIDADO -> KanbanColumn.VALIDADOS
-    DiagnosticStatus.BORRADOR -> KanbanColumn.PENDIENTES
-}
-
 data class AdminPendingUiState(
     val diagnostics: List<DiagnosticEntity> = emptyList(),
     val usersById: Map<Long, UserEntity> = emptyMap(),

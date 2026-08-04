@@ -2,7 +2,6 @@ package com.example.todoaccesible.navigation
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Assignment
-import androidx.compose.material.icons.filled.Compare
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Help
@@ -29,7 +28,6 @@ private val adminItems = listOf(
     BottomItem(Routes.AdminPending.route, "Diagnósticos", Icons.Filled.Assignment),
     BottomItem(Routes.AdminUsers.route, "Usuarios", Icons.Filled.Group),
     BottomItem(Routes.AdminQuestions.route, "Cuestionario", Icons.Filled.Help),
-    BottomItem(Routes.AdminCompare.route, "Comparar", Icons.Filled.Compare),
     BottomItem(Routes.Notifications.route, "Notificaciones", Icons.Filled.Notifications)
 )
 
