@@ -97,8 +97,9 @@ class DiagnosticResultViewModel(
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(exporting = true)
             try {
-                val questions = questionCatalogRepository.getAllQuestions()
-                val sections = questionCatalogRepository.getAllSections()
+                val tipo = diagnostic.tipoInmueble.ifBlank { "Otro" }
+                val questions = questionCatalogRepository.getAllQuestions(tipo)
+                val sections = questionCatalogRepository.getAllSections(tipo)
                 val answers = diagnosticRepository.observeAnswers(diagnosticId).first().associateBy { it.questionCodigo }
                 val photosByAnswer = diagnosticRepository.getPhotosForAnswers(answers.values.map { it.id })
                 val rows = questions.map { question ->

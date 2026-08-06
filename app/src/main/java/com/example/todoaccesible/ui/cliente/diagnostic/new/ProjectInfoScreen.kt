@@ -10,11 +10,13 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -71,7 +73,8 @@ fun ProjectInfoScreen(
                 ciudad = uiState.ciudad,
                 onCiudadChange = viewModel::onCiudadChange,
                 tipoInmueble = uiState.tipoInmueble,
-                onTipoInmuebleChange = viewModel::onTipoInmuebleChange,
+                onTipoInmuebleChange = {},
+                tipoInmuebleReadOnly = true,
                 fechaEvaluacion = uiState.fechaEvaluacion,
                 onFechaEvaluacionChange = viewModel::onFechaEvaluacionChange,
                 responsable = uiState.responsable,
@@ -100,5 +103,19 @@ fun ProjectInfoScreen(
                 )
             }
         }
+    }
+
+    if (uiState.showResumeDialog) {
+        AlertDialog(
+            onDismissRequest = viewModel::dismissResumeDialog,
+            title = { Text("Continuar donde me quedé") },
+            text = { Text("Ya tenías avance en un diagnóstico sin enviar. ¿Quieres continuarlo o empezar de nuevo?") },
+            confirmButton = {
+                TextButton(onClick = viewModel::dismissResumeDialog) { Text("Continuar") }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::startOver) { Text("Empezar de nuevo") }
+            }
+        )
     }
 }

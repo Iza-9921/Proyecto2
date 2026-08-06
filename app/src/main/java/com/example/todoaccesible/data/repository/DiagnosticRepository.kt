@@ -44,6 +44,17 @@ interface DiagnosticRepository {
     suspend fun submit(diagnosticId: Long)
     suspend fun discardDraft(diagnosticId: Long)
 
+    /** `true` si el borrador ya tiene datos capturados (nombre/ubicación o alguna respuesta), para ofrecer "continuar" vs "empezar de nuevo". */
+    suspend fun draftHasProgress(diagnosticId: Long): Boolean
+
+    /**
+     * El cliente reenvía la información que el admin le solicitó: reabre a
+     * PENDIENTE solo las preguntas que estaban marcadas `SOLICITAR_INFO`
+     * (sus respuestas ya se guardaron con [saveAnswer] mientras editaba),
+     * regresa el diagnóstico a EN_REVISION y notifica a los administradores.
+     */
+    suspend fun resubmitInfoAdicional(diagnosticId: Long)
+
     fun observeForCliente(clienteId: Long): Flow<List<DiagnosticEntity>>
     fun observeAllSubmitted(): Flow<List<DiagnosticEntity>>
     fun observeById(id: Long): Flow<DiagnosticEntity?>

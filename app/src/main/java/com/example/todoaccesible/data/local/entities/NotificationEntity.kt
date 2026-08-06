@@ -7,9 +7,10 @@ package com.example.todoaccesible.data.local.entities
  */
 data class NotificationEntity(
     val id: Long = 0,
-    val diagnosticId: Long,
+    /** `null` para avisos que no están ligados a un diagnóstico puntual (p.ej. un comentario de cuenta del admin). */
+    val diagnosticId: Long?,
     val destinatarioId: Long,
-    val tipo: String, // "nuevo_diagnostico" | "validado" | "info_requerida"
+    val tipo: String, // "nuevo_diagnostico" | "validado" | "info_requerida" | "cuenta" | "evaluacion" | ...
     val mensaje: String,
     val leido: Boolean = false,
     val fecha: Long

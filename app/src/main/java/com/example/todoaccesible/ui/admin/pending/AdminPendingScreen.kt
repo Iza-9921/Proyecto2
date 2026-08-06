@@ -1,17 +1,18 @@
 package com.example.todoaccesible.ui.admin.pending
 
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
@@ -26,16 +27,22 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.unit.dp
 import com.example.todoaccesible.core.designsystem.DiagnosticStatusChip
 import com.example.todoaccesible.core.designsystem.NivelChip
 import com.example.todoaccesible.data.local.entities.DiagnosticEntity
 import com.example.todoaccesible.data.model.DiagnosticStatus
-import kotlinx.coroutines.launch
 
 @Composable
 fun AdminPendingScreen(
@@ -53,7 +60,7 @@ fun AdminPendingScreen(
             }
 
             if (tabIndex == 0) {
-                KanbanBoard(diagnostics = uiState.filtered, onOpenReview = onOpenReview)
+                KanbanBoard(diagnostics = uiState.filtered, onOpenReview = onOpenReview, onMove = viewModel::moveToColumn)
             } else {
                 TableView(
                     uiState = uiState,
@@ -66,40 +73,92 @@ fun AdminPendingScreen(
     }
 }
 
+/**
+ * Todas las columnas visibles a la vez en una fila con scroll horizontal
+ * (en vez del `HorizontalPager` de una columna a la vez que había antes),
+ * para que una tarjeta se pueda arrastrar físicamente de una columna a
+ * otra, igual que `KanbanBoard.jsx` en la web. Mantén presionada una
+ * tarjeta y arrástrala sobre otra columna para soltarla ahí.
+ */
 @Composable
-private fun KanbanBoard(diagnostics: List<DiagnosticEntity>, onOpenReview: (Long) -> Unit) {
+private fun KanbanBoard(
+    diagnostics: List<DiagnosticEntity>,
+    onOpenReview: (Long) -> Unit,
+    onMove: (Long, KanbanColumn) -> Unit
+) {
     val columns = KanbanColumn.entries
-    val pagerState = rememberPagerState(pageCount = { columns.size })
-    val scope = rememberCoroutineScope()
+    var draggedId by remember { mutableStateOf<Long?>(null) }
+    var dragOffset by remember { mutableStateOf(Offset.Zero) }
+    val cardBounds = remember { mutableStateMapOf<Long, Rect>() }
+    val columnBounds = remember { mutableStateMapOf<KanbanColumn, Rect>() }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
-                .padding(vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            columns.forEachIndexed { index, column ->
-                FilterChip(
-                    selected = pagerState.currentPage == index,
-                    onClick = { scope.launch { pagerState.animateScrollToPage(index) } },
-                    label = { Text("${column.label} (${diagnostics.count { it.estado.kanbanColumn() == column }})") },
-                    modifier = Modifier.padding(horizontal = 4.dp)
-                )
-            }
-        }
-
-        HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
-            val column = columns[page]
+    Row(
+        modifier = Modifier
+            .fillMaxSize()
+            .horizontalScroll(rememberScrollState())
+            .padding(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        columns.forEach { column ->
             val columnDiagnostics = diagnostics.filter { it.estado.kanbanColumn() == column }
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+            Column(
+                modifier = Modifier
+                    .width(280.dp)
+                    .fillMaxHeight()
+                    .onGloballyPositioned { coords -> columnBounds[column] = coords.boundsInRoot() }
             ) {
-                items(columnDiagnostics, key = { it.id }) { diagnostic ->
-                    DiagnosticKanbanCard(diagnostic, onClick = { onOpenReview(diagnostic.id) })
+                Text(
+                    "${column.label} (${columnDiagnostics.size})",
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.padding(8.dp)
+                )
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(columnDiagnostics, key = { it.id }) { diagnostic ->
+                        val isDragging = draggedId == diagnostic.id
+                        DiagnosticKanbanCard(
+                            diagnostic = diagnostic,
+                            onClick = { onOpenReview(diagnostic.id) },
+                            modifier = Modifier
+                                .onGloballyPositioned { coords -> cardBounds[diagnostic.id] = coords.boundsInRoot() }
+                                .graphicsLayer {
+                                    if (isDragging) {
+                                        translationX = dragOffset.x
+                                        translationY = dragOffset.y
+                                        shadowElevation = 12f
+                                        alpha = 0.92f
+                                    }
+                                }
+                                .pointerInput(diagnostic.id) {
+                                    detectDragGesturesAfterLongPress(
+                                        onDragStart = {
+                                            draggedId = diagnostic.id
+                                            dragOffset = Offset.Zero
+                                        },
+                                        onDrag = { change, delta ->
+                                            change.consume()
+                                            dragOffset += delta
+                                        },
+                                        onDragEnd = {
+                                            val bounds = cardBounds[diagnostic.id]
+                                            if (bounds != null) {
+                                                val puntoSoltado = bounds.center + dragOffset
+                                                val columnaDestino = columnBounds.entries.firstOrNull { (_, rect) -> rect.contains(puntoSoltado) }?.key
+                                                if (columnaDestino != null && columnaDestino != column) {
+                                                    onMove(diagnostic.id, columnaDestino)
+                                                }
+                                            }
+                                            draggedId = null
+                                            dragOffset = Offset.Zero
+                                        },
+                                        onDragCancel = { draggedId = null; dragOffset = Offset.Zero }
+                                    )
+                                }
+                        )
+                    }
                 }
             }
         }
@@ -107,8 +166,8 @@ private fun KanbanBoard(diagnostics: List<DiagnosticEntity>, onOpenReview: (Long
 }
 
 @Composable
-private fun DiagnosticKanbanCard(diagnostic: DiagnosticEntity, onClick: () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth(), onClick = onClick) {
+private fun DiagnosticKanbanCard(diagnostic: DiagnosticEntity, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Card(modifier = modifier.fillMaxWidth(), onClick = onClick) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(diagnostic.projectName, style = MaterialTheme.typography.titleMedium)
             Text(diagnostic.ubicacion, style = MaterialTheme.typography.bodyMedium)

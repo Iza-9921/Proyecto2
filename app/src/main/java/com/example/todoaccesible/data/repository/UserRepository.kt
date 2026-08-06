@@ -21,4 +21,7 @@ interface UserRepository {
 
     /** Descuenta un diagnóstico disponible tras un envío exitoso; no hace nada si ya es 0 o ilimitado. */
     suspend fun decrementDiagnosticoDisponible(userId: Long)
+
+    /** Asigna el cuestionario (tipo de inmueble) que este cliente debe responder; lo hace el admin al activar la cuenta. */
+    suspend fun assignCuestionario(userId: Long, tipo: String)
 }

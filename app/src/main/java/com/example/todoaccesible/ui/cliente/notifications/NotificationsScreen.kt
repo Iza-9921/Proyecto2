@@ -65,7 +65,7 @@ fun NotificationsScreen(
                     modifier = Modifier.fillMaxWidth(),
                     onClick = {
                         if (!notification.leido) viewModel.markRead(notification.id)
-                        onOpenDiagnostic(notification.diagnosticId)
+                        notification.diagnosticId?.let(onOpenDiagnostic)
                     }
                 ) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {

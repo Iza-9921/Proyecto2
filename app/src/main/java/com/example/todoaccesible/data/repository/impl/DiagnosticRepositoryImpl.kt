@@ -73,7 +73,9 @@ class DiagnosticRepositoryImpl(
                 telefono = "55 1234 5678",
                 entidadFederativa = "Ciudad de México",
                 ciudad = "Ciudad de México",
-                tipoInmueble = "Edificio de oficinas",
+                // Debe coincidir con el catálogo del que salen los códigos de pregunta sembrados
+                // más abajo (187 preguntas fijas de QuestionCatalogSeeder = tipo "Otro").
+                tipoInmueble = QuestionCatalogSeeder.TIPO,
                 fechaEvaluacion = System.currentTimeMillis(),
                 fechaValidacion = System.currentTimeMillis(),
                 observacionesAdmin = null,
@@ -137,7 +139,9 @@ class DiagnosticRepositoryImpl(
                 telefono = "55 1234 5678",
                 entidadFederativa = "Ciudad de México",
                 ciudad = "Ciudad de México",
-                tipoInmueble = "Edificio de oficinas",
+                // Debe coincidir con el catálogo del que salen los códigos de pregunta sembrados
+                // más abajo (187 preguntas fijas de QuestionCatalogSeeder = tipo "Otro").
+                tipoInmueble = QuestionCatalogSeeder.TIPO,
                 fechaEvaluacion = System.currentTimeMillis()
             )
             val draftAnswers = questions.mapIndexedNotNull { index, question ->
@@ -248,8 +252,9 @@ class DiagnosticRepositoryImpl(
 
     override suspend fun recalculateScore(diagnosticId: Long): ScorecardResult? {
         val diagnostic = diagnostics.snapshot.find { it.id == diagnosticId } ?: return null
-        val questions = questionCatalogRepository.getAllQuestions()
-        val sectionNameById = questionCatalogRepository.getAllSections().associate { it.id to it.nombre }
+        val tipo = diagnostic.tipoInmueble.ifBlank { "Otro" }
+        val questions = questionCatalogRepository.getAllQuestions(tipo)
+        val sectionNameById = questionCatalogRepository.getAllSections(tipo).associate { it.id to it.nombre }
         val scorecardQuestions = questions.map {
             ScorecardQuestion(
                 codigo = it.codigo,
@@ -273,7 +278,9 @@ class DiagnosticRepositoryImpl(
     }
 
     override suspend fun countUnanswered(diagnosticId: Long): Int {
-        val totalQuestions = questionCatalogRepository.getAllQuestions().size
+        val diagnostic = diagnostics.snapshot.find { it.id == diagnosticId } ?: return 0
+        val tipo = diagnostic.tipoInmueble.ifBlank { "Otro" }
+        val totalQuestions = questionCatalogRepository.getAllQuestions(tipo).size
         val answeredCount = answers.snapshot.count { it.diagnosticId == diagnosticId && it.valor != null }
         return (totalQuestions - answeredCount).coerceAtLeast(0)
     }
@@ -314,6 +321,42 @@ class DiagnosticRepositoryImpl(
         answers.mutate { list -> list.filterNot { it.diagnosticId == diagnosticId } }
     }
 
+    override suspend fun draftHasProgress(diagnosticId: Long): Boolean {
+        val diagnostic = diagnostics.snapshot.find { it.id == diagnosticId } ?: return false
+        if (diagnostic.projectName.isNotBlank() || diagnostic.ubicacion.isNotBlank()) return true
+        return answers.snapshot.any { it.diagnosticId == diagnosticId && it.valor != null }
+    }
+
+    override suspend fun resubmitInfoAdicional(diagnosticId: Long) {
+        val diagnostic = diagnostics.snapshot.find { it.id == diagnosticId } ?: return
+        val previousStatus = diagnostic.estado
+
+        val flaggedCodes = questionReviewRepository.observeForDiagnostic(diagnosticId).first()
+            .filter { it.status == QuestionReviewStatus.SOLICITAR_INFO }
+            .map { it.questionCodigo }
+        flaggedCodes.forEach { codigo -> questionReviewRepository.resetForResubmission(diagnosticId, codigo) }
+
+        diagnostics.mutate { list -> list.map { if (it.id == diagnosticId) it.copy(estado = DiagnosticStatus.EN_REVISION) else it } }
+
+        diagnosticHistoryRepository.record(
+            diagnosticId = diagnosticId,
+            previousStatus = previousStatus,
+            newStatus = DiagnosticStatus.EN_REVISION,
+            reviewerId = null,
+            comentario = "El cliente respondió la información solicitada"
+        )
+
+        val admins = userRepository.observeAll().first().filter { it.rol == Role.ADMIN }
+        admins.forEach {
+            notificationRepository.notify(
+                diagnosticId = diagnosticId,
+                destinatarioId = it.id,
+                tipo = "respuesta_recibida",
+                mensaje = "El cliente respondió la información solicitada para \"${diagnostic.projectName}\"."
+            )
+        }
+    }
+
     override fun observeForCliente(clienteId: Long) =
         diagnostics.flow.map { list -> list.filter { it.clienteId == clienteId }.sortedByDescending { it.fechaCreacion } }
 
@@ -351,8 +394,10 @@ class DiagnosticRepositoryImpl(
 
     /** Calcula (sin persistir ni notificar) el resultado basado en la validación por pregunta del admin. */
     override suspend fun getOfficialScore(diagnosticId: Long): ScorecardResult? {
-        val questions = questionCatalogRepository.getAllQuestions()
-        val sectionNameById = questionCatalogRepository.getAllSections().associate { it.id to it.nombre }
+        val diagnostic = diagnostics.snapshot.find { it.id == diagnosticId } ?: return null
+        val tipo = diagnostic.tipoInmueble.ifBlank { "Otro" }
+        val questions = questionCatalogRepository.getAllQuestions(tipo)
+        val sectionNameById = questionCatalogRepository.getAllSections(tipo).associate { it.id to it.nombre }
         val scorecardQuestions = questions.map {
             ScorecardQuestion(
                 codigo = it.codigo,

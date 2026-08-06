@@ -6,20 +6,28 @@ import com.example.todoaccesible.data.local.memory.InMemoryTable
 import com.example.todoaccesible.data.preferences.ActiveSessionRegistry
 import com.example.todoaccesible.data.preferences.DiagnosticQuotaStore
 import com.example.todoaccesible.data.preferences.SessionManager
+import com.example.todoaccesible.data.preferences.PanelCollapseStore
+import com.example.todoaccesible.data.preferences.ThemePreferenceStore
 import com.example.todoaccesible.data.repository.AuthRepository
 import com.example.todoaccesible.data.repository.DiagnosticHistoryRepository
 import com.example.todoaccesible.data.repository.DiagnosticRepository
 import com.example.todoaccesible.data.repository.NotificationRepository
+import com.example.todoaccesible.data.repository.PresenceRepository
 import com.example.todoaccesible.data.repository.QuestionCatalogRepository
 import com.example.todoaccesible.data.repository.QuestionReviewRepository
+import com.example.todoaccesible.data.repository.TipoCuestionarioRepository
 import com.example.todoaccesible.data.repository.UserRepository
 import com.example.todoaccesible.data.repository.impl.AuthRepositoryImpl
 import com.example.todoaccesible.data.repository.impl.DiagnosticHistoryRepositoryImpl
 import com.example.todoaccesible.data.repository.impl.DiagnosticRepositoryImpl
 import com.example.todoaccesible.data.repository.impl.NotificationRepositoryImpl
+import com.example.todoaccesible.data.repository.impl.PresenceRepositoryImpl
 import com.example.todoaccesible.data.repository.impl.QuestionCatalogRepositoryImpl
 import com.example.todoaccesible.data.repository.impl.QuestionReviewRepositoryImpl
+import com.example.todoaccesible.data.repository.impl.TipoCuestionarioRepositoryImpl
 import com.example.todoaccesible.data.repository.impl.UserRepositoryImpl
+import com.example.todoaccesible.core.designsystem.ToastController
+import com.example.todoaccesible.core.voice.VoiceGuideController
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -34,9 +42,16 @@ import kotlinx.coroutines.launch
 class AppContainer(context: Context) {
     val sessionManager = SessionManager(context.applicationContext)
     val activeSessionRegistry = ActiveSessionRegistry()
+    val themePreferenceStore = ThemePreferenceStore(context.applicationContext)
+    val voiceGuideController = VoiceGuideController(context.applicationContext)
+    val panelCollapseStore = PanelCollapseStore(context.applicationContext)
+    val toastController = ToastController()
+    val presenceRepository: PresenceRepository = PresenceRepositoryImpl()
 
     private val usersTable = InMemoryTable<UserEntity>(UserRepositoryImpl.defaultUsers())
     private val diagnosticQuotaStore = DiagnosticQuotaStore(context.applicationContext)
+
+    val tipoCuestionarioRepository: TipoCuestionarioRepository = TipoCuestionarioRepositoryImpl()
 
     val questionCatalogRepository: QuestionCatalogRepository = QuestionCatalogRepositoryImpl()
 

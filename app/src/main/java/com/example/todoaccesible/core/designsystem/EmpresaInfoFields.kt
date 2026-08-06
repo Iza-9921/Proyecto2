@@ -39,16 +39,19 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/** Categorías de inmueble disponibles para el registro del proyecto. */
+/**
+ * Categorías de inmueble disponibles para el registro del proyecto; debe
+ * coincidir exactamente con `TIPOS_INMUEBLE` en `categoriasMock.js` de la
+ * web y con [com.example.todoaccesible.data.repository.impl.TipoCuestionarioRepositoryImpl.defaultTipos]
+ * porque cada nombre es también la clave del catálogo de preguntas de ese tipo.
+ */
 val TiposDeInmueble: List<String> = listOf(
     "Edificio de oficinas",
-    "Centro comercial",
-    "Restaurante",
-    "Hotel",
-    "Hospital o clínica",
-    "Escuela",
-    "Vivienda",
+    "Comercio",
+    "Vivienda unifamiliar",
+    "Edificio residencial",
     "Espacio público",
+    "Local comercial",
     "Otro"
 )
 
@@ -83,7 +86,9 @@ fun EmpresaInfoFields(
     logoEmpresaUri: String?,
     onLogoEmpresaChange: (String?) -> Unit,
     projectNameLabel: String = "Nombre de la empresa",
-    showRevision: Boolean = true
+    showRevision: Boolean = true,
+    /** Cuando es `true`, el tipo de inmueble se muestra de solo lectura (ya asignado por el admin al activar la cuenta). */
+    tipoInmuebleReadOnly: Boolean = false
 ) {
     var showDatePicker by remember { mutableStateOf(false) }
     var otroTipoInmueble by remember { mutableStateOf(tipoInmueble.isNotBlank() && tipoInmueble !in TiposDeInmueble) }
@@ -143,21 +148,33 @@ fun EmpresaInfoFields(
         )
     }
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        DropdownField(
-            label = "Tipo de inmueble",
-            options = TiposDeInmueble,
-            selected = if (otroTipoInmueble) "Otro" else tipoInmueble,
-            onSelected = { option ->
-                if (option == "Otro") {
-                    otroTipoInmueble = true
-                    onTipoInmuebleChange("")
-                } else {
-                    otroTipoInmueble = false
-                    onTipoInmuebleChange(option)
-                }
-            },
-            modifier = Modifier.weight(1f)
-        )
+        if (tipoInmuebleReadOnly) {
+            OutlinedTextField(
+                value = tipoInmueble,
+                onValueChange = {},
+                readOnly = true,
+                enabled = false,
+                label = { Text("Tipo de inmueble") },
+                supportingText = { Text("Asignado por el administrador") },
+                modifier = Modifier.weight(1f)
+            )
+        } else {
+            DropdownField(
+                label = "Tipo de inmueble",
+                options = TiposDeInmueble,
+                selected = if (otroTipoInmueble) "Otro" else tipoInmueble,
+                onSelected = { option ->
+                    if (option == "Otro") {
+                        otroTipoInmueble = true
+                        onTipoInmuebleChange("")
+                    } else {
+                        otroTipoInmueble = false
+                        onTipoInmuebleChange(option)
+                    }
+                },
+                modifier = Modifier.weight(1f)
+            )
+        }
         OutlinedTextField(
             value = fechaEvaluacion?.let { SimpleDateFormat("dd/MM/yyyy", Locale("es", "MX")).format(Date(it)) } ?: "",
             onValueChange = {},
@@ -171,7 +188,7 @@ fun EmpresaInfoFields(
             modifier = Modifier.weight(1f)
         )
     }
-    if (otroTipoInmueble) {
+    if (!tipoInmuebleReadOnly && otroTipoInmueble) {
         OutlinedTextField(
             value = tipoInmueble,
             onValueChange = onTipoInmuebleChange,

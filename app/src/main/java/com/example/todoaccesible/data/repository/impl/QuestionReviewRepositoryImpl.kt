@@ -21,6 +21,12 @@ class QuestionReviewRepositoryImpl(
         upsert(diagnosticId, questionCodigo) { it.copy(comentario = comentario, reviewerId = reviewerId, fecha = System.currentTimeMillis()) }
     }
 
+    override suspend fun resetForResubmission(diagnosticId: Long, questionCodigo: String) {
+        upsert(diagnosticId, questionCodigo) {
+            it.copy(status = QuestionReviewStatus.PENDIENTE, comentario = "", reviewerId = null, fecha = System.currentTimeMillis())
+        }
+    }
+
     private fun upsert(
         diagnosticId: Long,
         questionCodigo: String,

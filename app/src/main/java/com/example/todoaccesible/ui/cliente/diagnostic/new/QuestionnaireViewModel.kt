@@ -132,8 +132,9 @@ class QuestionnaireViewModel(
 
     init {
         viewModelScope.launch {
-            _sections.value = questionCatalogRepository.getAllSections()
-            _questions.value = questionCatalogRepository.getAllQuestions()
+            val tipo = diagnosticRepository.getById(diagnosticId)?.tipoInmueble?.ifBlank { "Otro" } ?: "Otro"
+            _sections.value = questionCatalogRepository.getAllSections(tipo)
+            _questions.value = questionCatalogRepository.getAllQuestions(tipo)
             moveTo(_currentIndex.value)
         }
     }
