@@ -15,8 +15,6 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.navArgument
 import com.example.todoaccesible.AppContainer
-import com.example.todoaccesible.ui.admin.compare.CompareDiagnosticsScreen
-import com.example.todoaccesible.ui.admin.compare.CompareDiagnosticsViewModel
 import com.example.todoaccesible.ui.admin.dashboard.AdminDashboardScreen
 import com.example.todoaccesible.ui.admin.dashboard.AdminDashboardViewModel
 import com.example.todoaccesible.ui.admin.pending.AdminPendingScreen
@@ -273,14 +271,13 @@ fun TodoAccesibleNavGraph(
         composable(Routes.AdminDashboard.route) {
             val viewModel: AdminDashboardViewModel = viewModel(
                 factory = viewModelFactory {
-                    initializer { AdminDashboardViewModel(container.diagnosticRepository, container.panelCollapseStore) }
+                    initializer { AdminDashboardViewModel(container.diagnosticRepository) }
                 }
             )
             AdminShell(navController, currentRoute) {
                 AdminDashboardScreen(
                     viewModel = viewModel,
-                    onLogout = ::logout,
-                    onOpenDiagnostic = { id -> navController.navigate(Routes.AdminReview.build(id)) }
+                    onLogout = ::logout
                 )
             }
         }
@@ -317,11 +314,11 @@ fun TodoAccesibleNavGraph(
         }
 
         composable(Routes.AdminPending.route) {
-            val reviewerId = session?.userId ?: return@composable
+            session?.userId ?: return@composable
             val viewModel: AdminPendingViewModel = viewModel(
                 factory = viewModelFactory {
                     initializer {
-                        AdminPendingViewModel(container.diagnosticRepository, container.userRepository, reviewerId, container.toastController)
+                        AdminPendingViewModel(container.diagnosticRepository, container.userRepository)
                     }
                 }
             )
@@ -356,15 +353,6 @@ fun TodoAccesibleNavGraph(
                 }
             )
             AdminReviewScreen(viewModel = viewModel, onNavigateBack = { navController.popBackStack() })
-        }
-
-        composable(Routes.AdminCompare.route) {
-            val viewModel: CompareDiagnosticsViewModel = viewModel(
-                factory = viewModelFactory { initializer { CompareDiagnosticsViewModel(container.diagnosticRepository) } }
-            )
-            AdminShell(navController, currentRoute) {
-                CompareDiagnosticsScreen(viewModel = viewModel)
-            }
         }
     }
 }

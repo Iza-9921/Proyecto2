@@ -36,11 +36,9 @@ object VoiceInstructions {
         Routes.AdminQuestions.route to
             "Estás en la gestión de preguntas del diagnóstico. Aquí puedes crear, editar o eliminar los cuestionarios, secciones y preguntas que los clientes contestan al hacer un diagnóstico.",
         Routes.AdminPending.route to
-            "Estás en el tablero de diagnósticos pendientes. Aquí ves los diagnósticos organizados por su estado; puedes filtrarlos y entrar a cualquiera para revisarlo.",
+            "Estás en la lista de diagnósticos pendientes. Aquí puedes buscar y filtrar los diagnósticos por su estado, y entrar a cualquiera para revisarlo.",
         Routes.AdminReview.route to
-            "Estás revisando un diagnóstico. Puedes aprobar o rechazar cada pregunta que contestó el cliente, comparar las fotos, pedirle más información si algo falta, y exportar el PDF del cliente o del administrador.",
-        Routes.AdminCompare.route to
-            "Estás comparando dos diagnósticos lado a lado, para ver las diferencias entre sus resultados."
+            "Estás revisando un diagnóstico. Puedes aprobar o rechazar cada pregunta que contestó el cliente, comparar las fotos, pedirle más información si algo falta, y exportar el PDF del cliente o del administrador."
     )
 
     private const val TEXTO_POR_DEFECTO =

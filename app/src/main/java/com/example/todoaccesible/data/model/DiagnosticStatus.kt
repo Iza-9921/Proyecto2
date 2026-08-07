@@ -1,10 +1,8 @@
 package com.example.todoaccesible.data.model
 
 /**
- * Columnas del Kanban de admin: PENDIENTE, EN_REVISION, INFO_REQUERIDA, VALIDADO.
- * RECHAZADO se muestra agrupado dentro de la columna INFO_REQUERIDA (ambos
- * requieren acción del cliente) pero se conserva como estado propio para
- * poder distinguirlo con una etiqueta en la UI.
+ * Estados del ciclo de vida de un diagnóstico: BORRADOR, PENDIENTE, EN_REVISION,
+ * INFO_REQUERIDA, RECHAZADO, VALIDADO.
  */
 enum class DiagnosticStatus(val label: String) {
     BORRADOR("Borrador"),

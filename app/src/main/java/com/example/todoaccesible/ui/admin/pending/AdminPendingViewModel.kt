@@ -2,8 +2,6 @@ package com.example.todoaccesible.ui.admin.pending
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.todoaccesible.core.designsystem.ToastController
-import com.example.todoaccesible.core.designsystem.ToastTipo
 import com.example.todoaccesible.data.local.entities.DiagnosticEntity
 import com.example.todoaccesible.data.local.entities.UserEntity
 import com.example.todoaccesible.data.model.DiagnosticStatus
@@ -14,31 +12,6 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
-
-/** Las 4 columnas del Kanban de admin. RECHAZADO se agrupa dentro de INFO_REQUERIDA. */
-enum class KanbanColumn(val label: String) {
-    PENDIENTES("Pendientes"),
-    EN_REVISION("En revisión"),
-    INFO_REQUERIDA("Info requerida"),
-    VALIDADOS("Validados")
-}
-
-fun DiagnosticStatus.kanbanColumn(): KanbanColumn = when (this) {
-    DiagnosticStatus.PENDIENTE -> KanbanColumn.PENDIENTES
-    DiagnosticStatus.EN_REVISION -> KanbanColumn.EN_REVISION
-    DiagnosticStatus.INFO_REQUERIDA, DiagnosticStatus.RECHAZADO -> KanbanColumn.INFO_REQUERIDA
-    DiagnosticStatus.VALIDADO -> KanbanColumn.VALIDADOS
-    DiagnosticStatus.BORRADOR -> KanbanColumn.PENDIENTES
-}
-
-/** Estado destino al soltar una tarjeta sobre esta columna (RECHAZADO no tiene columna propia, se resuelve a INFO_REQUERIDA). */
-fun KanbanColumn.toDiagnosticStatus(): DiagnosticStatus = when (this) {
-    KanbanColumn.PENDIENTES -> DiagnosticStatus.PENDIENTE
-    KanbanColumn.EN_REVISION -> DiagnosticStatus.EN_REVISION
-    KanbanColumn.INFO_REQUERIDA -> DiagnosticStatus.INFO_REQUERIDA
-    KanbanColumn.VALIDADOS -> DiagnosticStatus.VALIDADO
-}
 
 data class AdminPendingUiState(
     val diagnostics: List<DiagnosticEntity> = emptyList(),
@@ -54,10 +27,8 @@ data class AdminPendingUiState(
 }
 
 class AdminPendingViewModel(
-    private val diagnosticRepository: DiagnosticRepository,
-    userRepository: UserRepository,
-    private val reviewerId: Long,
-    private val toastController: ToastController
+    diagnosticRepository: DiagnosticRepository,
+    userRepository: UserRepository
 ) : ViewModel() {
 
     private val _filterEstado = MutableStateFlow<DiagnosticStatus?>(null)
@@ -79,13 +50,4 @@ class AdminPendingViewModel(
 
     fun setFilterEstado(estado: DiagnosticStatus?) { _filterEstado.value = estado }
     fun setQuery(value: String) { _query.value = value }
-
-    /** Arrastrar una tarjeta a otra columna del Kanban cambia su estado, igual que el drag-and-drop de `KanbanBoard.jsx`. */
-    fun moveToColumn(diagnosticId: Long, column: KanbanColumn) {
-        val nuevoEstado = column.toDiagnosticStatus()
-        viewModelScope.launch {
-            diagnosticRepository.updateStatus(diagnosticId, nuevoEstado, reviewerId)
-            toastController.show("Movido a \"${column.label}\"", ToastTipo.INFO)
-        }
-    }
 }

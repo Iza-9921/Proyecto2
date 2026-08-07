@@ -6,7 +6,6 @@ import com.example.todoaccesible.data.local.memory.InMemoryTable
 import com.example.todoaccesible.data.preferences.ActiveSessionRegistry
 import com.example.todoaccesible.data.preferences.DiagnosticQuotaStore
 import com.example.todoaccesible.data.preferences.SessionManager
-import com.example.todoaccesible.data.preferences.PanelCollapseStore
 import com.example.todoaccesible.data.preferences.ThemePreferenceStore
 import com.example.todoaccesible.data.repository.AuthRepository
 import com.example.todoaccesible.data.repository.DiagnosticHistoryRepository
@@ -44,7 +43,6 @@ class AppContainer(context: Context) {
     val activeSessionRegistry = ActiveSessionRegistry()
     val themePreferenceStore = ThemePreferenceStore(context.applicationContext)
     val voiceGuideController = VoiceGuideController(context.applicationContext)
-    val panelCollapseStore = PanelCollapseStore(context.applicationContext)
     val toastController = ToastController()
     val presenceRepository: PresenceRepository = PresenceRepositoryImpl()
 

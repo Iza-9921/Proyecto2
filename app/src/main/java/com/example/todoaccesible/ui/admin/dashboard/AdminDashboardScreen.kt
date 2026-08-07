@@ -1,6 +1,5 @@
 package com.example.todoaccesible.ui.admin.dashboard
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,34 +11,25 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material3.Card
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.todoaccesible.core.designsystem.CreditBar
 import com.example.todoaccesible.core.designsystem.nivelColor
-import com.example.todoaccesible.data.local.entities.DiagnosticEntity
-import com.example.todoaccesible.data.model.Nivel
 import com.example.todoaccesible.domain.scoring.CreditScore
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 @Composable
 fun AdminDashboardScreen(
     viewModel: AdminDashboardViewModel,
-    onLogout: () -> Unit,
-    onOpenDiagnostic: (Long) -> Unit = {}
+    onLogout: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
@@ -115,75 +105,6 @@ fun AdminDashboardScreen(
                                 color = nivelColor(nivel)
                             )
                         }
-                    }
-                }
-            }
-
-            Text("Diagnósticos evaluados", style = MaterialTheme.typography.titleMedium)
-            Nivel.entries.forEach { nivel ->
-                val diagnosticos = uiState.porNivelGrouped[nivel].orEmpty()
-                NivelLeaderboardCard(
-                    nivel = nivel,
-                    diagnosticos = diagnosticos,
-                    colapsado = nivel.name in uiState.collapsedNiveles,
-                    onToggle = { viewModel.toggleNivelCollapse(nivel) },
-                    onOpenDiagnostic = onOpenDiagnostic
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun NivelLeaderboardCard(
-    nivel: Nivel,
-    diagnosticos: List<DiagnosticEntity>,
-    colapsado: Boolean,
-    onToggle: () -> Unit,
-    onOpenDiagnostic: (Long) -> Unit
-) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth().clickable(onClick = onToggle),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    "${if (colapsado) "▸" else "▾"} ${nivel.label} · ${diagnosticos.size}",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = nivelColor(nivel)
-                )
-            }
-            if (!colapsado) {
-                if (diagnosticos.isEmpty()) {
-                    Text(
-                        "Sin diagnósticos en este nivel todavía.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                } else {
-                    diagnosticos.forEach { diagnostico ->
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onOpenDiagnostic(diagnostico.id) }
-                                .padding(vertical = 6.dp)
-                        ) {
-                            Text(diagnostico.projectName.ifBlank { "Sin nombre" }, style = MaterialTheme.typography.bodyLarge)
-                            Text(
-                                "${diagnostico.clienteNombre.ifBlank { "—" }} · ${diagnostico.tipoInmueble.ifBlank { "—" }} · " +
-                                    (diagnostico.fechaEnvio?.let { SimpleDateFormat("dd/MM/yyyy", Locale("es", "MX")).format(Date(it)) } ?: "—"),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Text(
-                                "Required ${diagnostico.requeridoPct ?: 0}% · Plus ${diagnostico.plusPct ?: 0}%",
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                            TextButton(onClick = { onOpenDiagnostic(diagnostico.id) }) { Text("Ver") }
-                        }
-                        HorizontalDivider()
                     }
                 }
             }
