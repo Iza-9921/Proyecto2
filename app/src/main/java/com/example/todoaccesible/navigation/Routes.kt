@@ -25,9 +25,6 @@ sealed class Routes(val route: String) {
     object AdminDashboard : Routes("admin/dashboard")
     object AdminUsers : Routes("admin/users")
     object AdminQuestions : Routes("admin/questions")
-    object AdminCategoryQuestions : Routes("admin/questions/category/{sectionId}") {
-        fun build(sectionId: String) = "admin/questions/category/$sectionId"
-    }
     object AdminPending : Routes("admin/pending")
     object AdminReview : Routes("admin/review/{diagnosticId}") {
         fun build(diagnosticId: Long) = "admin/review/$diagnosticId"
@@ -35,6 +32,5 @@ sealed class Routes(val route: String) {
 
     companion object {
         const val ARG_DIAGNOSTIC_ID = "diagnosticId"
-        const val ARG_SECTION_ID = "sectionId"
     }
 }

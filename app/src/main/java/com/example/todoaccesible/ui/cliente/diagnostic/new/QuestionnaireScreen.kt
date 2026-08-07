@@ -122,7 +122,7 @@ fun QuestionnaireScreen(
                 )
                 Text(text = question.concepto, style = MaterialTheme.typography.titleLarge)
 
-                question.imagenReferenciaUri?.let {
+                question.imagenEjemplo?.let {
                     OutlinedButton(onClick = { showReferenceImage = true }) {
                         Icon(Icons.Filled.Image, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
                         Text("Ver imagen de referencia")
@@ -215,7 +215,7 @@ fun QuestionnaireScreen(
     }
 
     if (showReferenceImage) {
-        uiState.currentQuestion?.imagenReferenciaUri?.let { uri ->
+        uiState.currentQuestion?.imagenEjemplo?.let { uri ->
             ReferenceImageDialog(uri = uri, onDismiss = { showReferenceImage = false })
         }
     }
