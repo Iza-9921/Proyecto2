@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material3.Card
@@ -25,7 +27,10 @@ import com.example.todoaccesible.core.designsystem.nivelColor
 import com.example.todoaccesible.domain.scoring.CreditScore
 
 @Composable
-fun AdminDashboardScreen(viewModel: AdminDashboardViewModel, onLogout: () -> Unit) {
+fun AdminDashboardScreen(
+    viewModel: AdminDashboardViewModel,
+    onLogout: () -> Unit
+) {
     val uiState by viewModel.uiState.collectAsState()
 
     Scaffold(
@@ -44,6 +49,7 @@ fun AdminDashboardScreen(viewModel: AdminDashboardViewModel, onLogout: () -> Uni
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
+                .verticalScroll(rememberScrollState())
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {

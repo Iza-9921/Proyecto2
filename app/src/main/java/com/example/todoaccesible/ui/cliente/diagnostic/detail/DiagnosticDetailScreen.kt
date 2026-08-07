@@ -36,7 +36,8 @@ import com.example.todoaccesible.data.model.DiagnosticStatus
 @Composable
 fun DiagnosticDetailScreen(
     viewModel: DiagnosticDetailViewModel,
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    onResponderInfoAdicional: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
@@ -78,6 +79,18 @@ fun DiagnosticDetailScreen(
                     DiagnosticStatusChip(status = diagnostic.estado)
                     Text(diagnostic.ubicacion, style = MaterialTheme.typography.bodyMedium)
                     Text("Responsable: ${diagnostic.responsable}", style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+            if (diagnostic.estado == DiagnosticStatus.INFO_REQUERIDA) {
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            "El administrador necesita más información en algunas preguntas antes de continuar la revisión.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.tertiary
+                        )
+                        BigTouchButton(text = "Responder información solicitada", onClick = onResponderInfoAdicional)
+                    }
                 }
             }
             item {

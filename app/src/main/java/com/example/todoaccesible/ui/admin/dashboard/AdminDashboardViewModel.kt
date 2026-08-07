@@ -5,7 +5,6 @@ import androidx.lifecycle.viewModelScope
 import com.example.todoaccesible.data.model.DiagnosticStatus
 import com.example.todoaccesible.data.model.Nivel
 import com.example.todoaccesible.data.repository.DiagnosticRepository
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
@@ -17,7 +16,9 @@ data class AdminDashboardUiState(
     val porNivel: Map<Nivel, Int> = emptyMap()
 )
 
-class AdminDashboardViewModel(diagnosticRepository: DiagnosticRepository) : ViewModel() {
+class AdminDashboardViewModel(
+    diagnosticRepository: DiagnosticRepository
+) : ViewModel() {
 
     val uiState: StateFlow<AdminDashboardUiState> = diagnosticRepository.observeAllSubmitted()
         .map { diagnostics ->
@@ -26,6 +27,5 @@ class AdminDashboardViewModel(diagnosticRepository: DiagnosticRepository) : View
                 porEstado = diagnostics.groupingBy { it.estado }.eachCount(),
                 porNivel = diagnostics.mapNotNull { it.nivel }.groupingBy { it }.eachCount()
             )
-        }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AdminDashboardUiState())
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AdminDashboardUiState())
 }

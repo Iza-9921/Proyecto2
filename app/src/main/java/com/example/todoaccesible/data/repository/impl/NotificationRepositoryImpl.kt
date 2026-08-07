@@ -9,7 +9,7 @@ class NotificationRepositoryImpl(
     private val notifications: InMemoryTable<NotificationEntity> = InMemoryTable()
 ) : NotificationRepository {
 
-    override suspend fun notify(diagnosticId: Long, destinatarioId: Long, tipo: String, mensaje: String) {
+    override suspend fun notify(diagnosticId: Long?, destinatarioId: Long, tipo: String, mensaje: String) {
         val id = notifications.nextId()
         notifications.mutate {
             it + NotificationEntity(

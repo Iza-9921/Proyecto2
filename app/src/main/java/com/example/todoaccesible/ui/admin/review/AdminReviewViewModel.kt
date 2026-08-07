@@ -17,6 +17,7 @@ import com.example.todoaccesible.data.model.DiagnosticStatus
 import com.example.todoaccesible.data.model.QuestionReviewStatus
 import com.example.todoaccesible.data.repository.DiagnosticHistoryRepository
 import com.example.todoaccesible.data.repository.DiagnosticRepository
+import com.example.todoaccesible.data.repository.PresenceRepository
 import com.example.todoaccesible.data.repository.QuestionCatalogRepository
 import com.example.todoaccesible.data.repository.QuestionReviewRepository
 import com.example.todoaccesible.data.repository.UserRepository
@@ -27,7 +28,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -77,8 +80,13 @@ class AdminReviewViewModel(
     private val questionCatalogRepository: QuestionCatalogRepository,
     private val diagnosticHistoryRepository: DiagnosticHistoryRepository,
     private val userRepository: UserRepository,
-    private val questionReviewRepository: QuestionReviewRepository
+    private val questionReviewRepository: QuestionReviewRepository,
+    private val presenceRepository: PresenceRepository
 ) : ViewModel() {
+
+    /** RF: "X está revisando este diagnóstico" — otros admins con latido reciente en esta pantalla. */
+    val otherViewers: StateFlow<List<String>> = presenceRepository.observeViewers(diagnosticId, reviewerId)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _questions = MutableStateFlow<List<QuestionEntity>>(emptyList())
     private val _sections = MutableStateFlow<List<com.example.todoaccesible.data.local.entities.SectionEntity>>(emptyList())
@@ -132,8 +140,9 @@ class AdminReviewViewModel(
 
     init {
         viewModelScope.launch {
-            _questions.value = questionCatalogRepository.getAllQuestions()
-            _sections.value = questionCatalogRepository.getAllSections()
+            val tipo = diagnosticRepository.getById(diagnosticId)?.tipoInmueble?.ifBlank { "Otro" } ?: "Otro"
+            _questions.value = questionCatalogRepository.getAllQuestions(tipo)
+            _sections.value = questionCatalogRepository.getAllSections(tipo)
         }
         viewModelScope.launch {
             answers.collect { list ->
@@ -142,6 +151,21 @@ class AdminReviewViewModel(
                 _photosByAnswer.value = photos.mapValues { (_, v) -> v.map { PhotoItem(it.id, Uri.parse(it.uriPath)) } }
             }
         }
+        viewModelScope.launch {
+            val reviewerName = userRepository.observeById(reviewerId).firstOrNull()?.nombre ?: "Un administrador"
+            while (isActive) {
+                presenceRepository.heartbeat(diagnosticId, reviewerId, reviewerName)
+                kotlinx.coroutines.delay(30_000L)
+            }
+        }
+    }
+
+    @OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
+    override fun onCleared() {
+        super.onCleared()
+        // viewModelScope ya está cancelado en este punto; se usa GlobalScope a propósito
+        // para que el `clear` (borrar el latido de presencia) sí llegue a ejecutarse.
+        kotlinx.coroutines.GlobalScope.launch { presenceRepository.clear(diagnosticId, reviewerId) }
     }
 
     fun setQuery(value: String) { _filters.value = _filters.value.copy(query = value) }
@@ -196,14 +220,21 @@ class AdminReviewViewModel(
         }
     }
 
-    /** PDF con el resultado OFICIAL (post-validación), solo disponible una vez que el diagnóstico ya fue validado. */
+    /**
+     * PDF "del administrador": se calcula desde la validación por pregunta
+     * que ya lleva capturada el admin (`QuestionReviewEntity`), disponible
+     * en cualquier momento de la revisión (no solo tras validar) — las
+     * preguntas aún sin dictamen puntúan como pendientes, igual que en la
+     * web ("PDF del administrador" al lado de "PDF del cliente" en
+     * `RevisarDiagnostico.jsx`, ambos disponibles desde el inicio de la revisión).
+     */
     fun exportPdfDefinitivo(context: Context) {
         viewModelScope.launch {
             val diagnostic = uiState.value.diagnostic ?: return@launch
-            if (diagnostic.estado != DiagnosticStatus.VALIDADO) return@launch
+            val esDefinitivo = diagnostic.estado == DiagnosticStatus.VALIDADO
             val scorecard = withContext(Dispatchers.Default) { diagnosticRepository.getOfficialScore(diagnosticId) } ?: return@launch
             val file = withContext(Dispatchers.IO) {
-                PdfScorecardGenerator.generate(context, diagnostic, scorecard, esDefinitivo = true)
+                PdfScorecardGenerator.generate(context, diagnostic, scorecard, esDefinitivo = esDefinitivo)
             }
             FileShare.share(context, file, "application/pdf")
         }

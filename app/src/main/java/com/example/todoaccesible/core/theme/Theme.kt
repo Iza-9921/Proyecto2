@@ -5,7 +5,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+
+/** Estado + acción de alternar tema, expuesto a cualquier pantalla vía [LocalThemeController]. */
+data class ThemeController(val isDark: Boolean, val toggle: () -> Unit)
+
+val LocalThemeController = staticCompositionLocalOf { ThemeController(isDark = false, toggle = {}) }
 
 private val LightColors = lightColorScheme(
     primary = BrandPink,

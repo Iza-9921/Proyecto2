@@ -16,6 +16,9 @@ sealed class Routes(val route: String) {
     object DiagnosticResult : Routes("cliente/diagnostic/{diagnosticId}/result") {
         fun build(diagnosticId: Long) = "cliente/diagnostic/$diagnosticId/result"
     }
+    object ResponderInfoAdicional : Routes("cliente/diagnostic/{diagnosticId}/responder") {
+        fun build(diagnosticId: Long) = "cliente/diagnostic/$diagnosticId/responder"
+    }
     object Notifications : Routes("cliente/notifications")
 
     // Admin
@@ -29,7 +32,6 @@ sealed class Routes(val route: String) {
     object AdminReview : Routes("admin/review/{diagnosticId}") {
         fun build(diagnosticId: Long) = "admin/review/$diagnosticId"
     }
-    object AdminCompare : Routes("admin/compare")
 
     companion object {
         const val ARG_DIAGNOSTIC_ID = "diagnosticId"

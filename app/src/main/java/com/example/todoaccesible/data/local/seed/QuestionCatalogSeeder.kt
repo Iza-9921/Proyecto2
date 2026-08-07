@@ -250,15 +250,19 @@ object QuestionCatalogSeeder {
         "5" to section5, "6" to section6, "7" to section7, "8" to section8
     )
 
-    fun sectionEntities(): List<SectionEntity> =
-        sections.mapIndexed { index, (id, nombre) -> SectionEntity(id = id, nombre = nombre, orden = index) }
+    /** Tipo bajo el cual se siembra este catálogo fijo (equivalente al fallback genérico "Otro" de la web). */
+    const val TIPO = "Otro"
 
-    fun questionEntities(): List<QuestionEntity> {
+    fun sectionEntities(tipo: String = TIPO): List<SectionEntity> =
+        sections.mapIndexed { index, (id, nombre) -> SectionEntity(id = id, tipo = tipo, nombre = nombre, orden = index) }
+
+    fun questionEntities(tipo: String = TIPO): List<QuestionEntity> {
         var globalOrder = 0
         return sections.flatMap { (sectionId, _) ->
             rowsBySection.getValue(sectionId).map { row ->
                 QuestionEntity(
                     codigo = "$sectionId.${row.sufijo}",
+                    tipo = tipo,
                     seccionId = sectionId,
                     concepto = row.concepto,
                     credito = row.credito,

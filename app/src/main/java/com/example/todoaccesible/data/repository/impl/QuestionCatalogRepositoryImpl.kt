@@ -3,141 +3,122 @@ package com.example.todoaccesible.data.repository.impl
 import com.example.todoaccesible.data.local.entities.QuestionEntity
 import com.example.todoaccesible.data.local.entities.SectionEntity
 import com.example.todoaccesible.data.local.memory.InMemoryTable
+import com.example.todoaccesible.data.local.seed.CuestionarioEjemploSeeder
 import com.example.todoaccesible.data.local.seed.QuestionCatalogSeeder
 import com.example.todoaccesible.data.model.Credito
 import com.example.todoaccesible.data.repository.QuestionCatalogRepository
-import java.util.concurrent.atomic.AtomicLong
+import kotlinx.coroutines.flow.map
 
-/** Catálogo sembrado por defecto al construirse (no hay backend ni base de datos). */
+/**
+ * Catálogo multi-tipo: cada "tipo de inmueble" tiene su propio set
+ * independiente de secciones/preguntas (equivalente a `scorecardStore.js`
+ * en la web). Se guarda todo en dos tablas planas filtradas por `tipo` en
+ * cada lectura -- más simple que separar una tabla por tipo, y evita
+ * reestructurar `InMemoryTable`. Sembrado al construirse para los tipos
+ * fijos por defecto ([TipoCuestionarioRepositoryImpl.defaultTipos]): "Otro"
+ * con el catálogo fijo de 187 preguntas, el resto con su set de ejemplo. Un
+ * tipo creado luego por el admin arranca vacío (se agrega vía [addSeccion]).
+ */
 class QuestionCatalogRepositoryImpl(
-    private val sections: InMemoryTable<SectionEntity> = InMemoryTable(QuestionCatalogSeeder.sectionEntities()),
-    private val questions: InMemoryTable<QuestionEntity> = InMemoryTable(QuestionCatalogSeeder.questionEntities())
+    private val sections: InMemoryTable<SectionEntity> = InMemoryTable(seedAllSections()),
+    private val questions: InMemoryTable<QuestionEntity> = InMemoryTable(seedAllQuestions())
 ) : QuestionCatalogRepository {
 
-    /** Sigue la numeración de las categorías sembradas ("1".."8") para las que cree el admin desde "Gestión del cuestionario". */
-    private val sectionIdSeq = AtomicLong(sections.snapshot.mapNotNull { it.id.toLongOrNull() }.maxOrNull() ?: 0L)
+    companion object {
+        private fun seedAllSections(): List<SectionEntity> =
+            TipoCuestionarioRepositoryImpl.defaultTipos().flatMap { sectionsFor(it.nombre) }
 
-    /** Sufijo único para el codigo de las preguntas que cree el admin (no colisiona con los sembrados "01".."38"). */
-    private val questionIdSeq = AtomicLong(questions.snapshot.size.toLong())
+        private fun seedAllQuestions(): List<QuestionEntity> =
+            TipoCuestionarioRepositoryImpl.defaultTipos().flatMap { questionsFor(it.nombre) }
 
-    override fun observeSections() = sections.flow
+        private fun sectionsFor(tipo: String): List<SectionEntity> = when {
+            tipo == QuestionCatalogSeeder.TIPO -> QuestionCatalogSeeder.sectionEntities(tipo)
+            CuestionarioEjemploSeeder.tieneEjemplo(tipo) -> CuestionarioEjemploSeeder.sectionEntities(tipo)
+            else -> emptyList()
+        }
 
-    override suspend fun getAllSections() = sections.snapshot.sortedBy { it.orden }
+        private fun questionsFor(tipo: String): List<QuestionEntity> = when {
+            tipo == QuestionCatalogSeeder.TIPO -> QuestionCatalogSeeder.questionEntities(tipo)
+            CuestionarioEjemploSeeder.tieneEjemplo(tipo) -> CuestionarioEjemploSeeder.questionEntities(tipo)
+            else -> emptyList()
+        }
+    }
 
-    override fun observeQuestions() = questions.flow
+    override fun observeSections(tipo: String) =
+        sections.flow.map { list -> list.filter { it.tipo == tipo }.sortedBy { it.orden } }
 
-    override suspend fun getAllQuestions() = questions.snapshot.sortedBy { it.orden }
+    override suspend fun getAllSections(tipo: String) =
+        sections.snapshot.filter { it.tipo == tipo }.sortedBy { it.orden }
 
-    override suspend fun getQuestionsForSection(sectionId: String) =
-        questions.snapshot.filter { it.seccionId == sectionId }.sortedBy { it.orden }
+    override fun observeQuestions(tipo: String) =
+        questions.flow.map { list -> list.filter { it.tipo == tipo }.sortedBy { it.orden } }
+
+    override suspend fun getAllQuestions(tipo: String) =
+        questions.snapshot.filter { it.tipo == tipo }.sortedBy { it.orden }
+
+    override suspend fun getQuestionsForSection(tipo: String, sectionId: String) =
+        questions.snapshot.filter { it.tipo == tipo && it.seccionId == sectionId }.sortedBy { it.orden }
 
     override suspend fun updateQuestion(question: QuestionEntity) {
-        questions.mutate { list -> list.map { if (it.codigo == question.codigo) question else it } }
+        questions.mutate { list -> list.map { if (it.tipo == question.tipo && it.codigo == question.codigo) question else it } }
     }
 
-    override suspend fun getActiveSections() =
-        sections.snapshot.filter { it.activa }.sortedBy { it.orden }
-
-    override suspend fun getActiveQuestions(): List<QuestionEntity> {
-        val activeSectionIds = sections.snapshot.filter { it.activa }.map { it.id }.toSet()
-        return questions.snapshot
-            .filter { it.activa && it.seccionId in activeSectionIds }
-            .sortedBy { it.orden }
+    override suspend fun addSeccion(tipo: String, icono: String, tituloLargo: String, tituloCorto: String): SectionEntity {
+        val existentes = sections.snapshot.filter { it.tipo == tipo }
+        val siguienteOrden = (existentes.maxOfOrNull { it.orden } ?: -1) + 1
+        val id = "seccion_${sections.nextId()}"
+        val nueva = SectionEntity(id = id, tipo = tipo, nombre = tituloLargo, orden = siguienteOrden, icono = icono, tituloCorto = tituloCorto)
+        sections.mutate { it + nueva }
+        return nueva
     }
 
-    override suspend fun createSection(nombre: String): SectionEntity {
-        val id = sectionIdSeq.incrementAndGet().toString()
-        val orden = (sections.snapshot.maxOfOrNull { it.orden } ?: -1) + 1
-        val section = SectionEntity(id = id, nombre = nombre, orden = orden, activa = true)
-        sections.mutate { it + section }
-        return section
-    }
-
-    override suspend fun renameSection(id: String, nombre: String) {
-        sections.mutate { list -> list.map { if (it.id == id) it.copy(nombre = nombre) else it } }
-    }
-
-    override suspend fun setSectionActive(id: String, activa: Boolean) {
-        sections.mutate { list -> list.map { if (it.id == id) it.copy(activa = activa) else it } }
-    }
-
-    override suspend fun moveSectionUp(id: String) = swapSectionWithNeighbor(id, -1)
-
-    override suspend fun moveSectionDown(id: String) = swapSectionWithNeighbor(id, 1)
-
-    private fun swapSectionWithNeighbor(id: String, delta: Int) {
-        val ordered = sections.snapshot.sortedBy { it.orden }
-        val index = ordered.indexOfFirst { it.id == id }
-        val neighborIndex = index + delta
-        if (index == -1 || neighborIndex !in ordered.indices) return
-        val current = ordered[index]
-        val neighbor = ordered[neighborIndex]
+    override suspend fun updateSeccion(tipo: String, seccionId: String, icono: String, tituloLargo: String, tituloCorto: String) {
         sections.mutate { list ->
             list.map {
-                when (it.id) {
-                    current.id -> it.copy(orden = neighbor.orden)
-                    neighbor.id -> it.copy(orden = current.orden)
-                    else -> it
-                }
+                if (it.tipo == tipo && it.id == seccionId) it.copy(nombre = tituloLargo, icono = icono, tituloCorto = tituloCorto) else it
             }
         }
     }
 
-    override suspend fun deleteSection(id: String): Boolean {
-        if (questions.snapshot.any { it.seccionId == id }) return false
-        sections.mutate { list -> list.filterNot { it.id == id } }
-        return true
+    override suspend fun deleteSeccion(tipo: String, seccionId: String) {
+        sections.mutate { list -> list.filterNot { it.tipo == tipo && it.id == seccionId } }
+        questions.mutate { list -> list.filterNot { it.tipo == tipo && it.seccionId == seccionId } }
     }
 
-    override suspend fun createQuestion(
+    override suspend fun addPregunta(
+        tipo: String,
         seccionId: String,
         concepto: String,
-        descripcion: String,
         credito: Credito,
-        activa: Boolean,
-        imagenReferenciaUri: String?
+        admiteFoto: Boolean,
+        descripcion: String,
+        imagenEjemplo: String?
     ): QuestionEntity {
-        val codigo = "$seccionId.q${questionIdSeq.incrementAndGet()}"
-        val orden = (questions.snapshot.maxOfOrNull { it.orden } ?: -1) + 1
-        val question = QuestionEntity(
+        val delaSeccion = questions.snapshot.filter { it.tipo == tipo && it.seccionId == seccionId }
+        val siguienteNumero = delaSeccion.size + 1
+        val codigo = "$seccionId.${siguienteNumero.toString().padStart(2, '0')}"
+        val siguienteOrden = (questions.snapshot.filter { it.tipo == tipo }.maxOfOrNull { it.orden } ?: -1) + 1
+        val nueva = QuestionEntity(
             codigo = codigo,
+            tipo = tipo,
             seccionId = seccionId,
             concepto = concepto,
             credito = credito,
-            admiteFoto = true,
-            orden = orden,
+            admiteFoto = admiteFoto,
+            orden = siguienteOrden,
             descripcion = descripcion,
-            activa = activa,
-            imagenReferenciaUri = imagenReferenciaUri
+            imagenEjemplo = imagenEjemplo
         )
-        questions.mutate { it + question }
-        return question
+        questions.mutate { it + nueva }
+        return nueva
     }
 
-    override suspend fun deleteQuestion(codigo: String) {
-        questions.mutate { list -> list.filterNot { it.codigo == codigo } }
+    override suspend fun deletePregunta(tipo: String, codigo: String) {
+        questions.mutate { list -> list.filterNot { it.tipo == tipo && it.codigo == codigo } }
     }
 
-    override suspend fun moveQuestionUp(codigo: String) = swapQuestionWithNeighbor(codigo, -1)
-
-    override suspend fun moveQuestionDown(codigo: String) = swapQuestionWithNeighbor(codigo, 1)
-
-    /** Solo cambia de posición dentro de la misma categoría (no altera el orden de otras secciones). */
-    private fun swapQuestionWithNeighbor(codigo: String, delta: Int) {
-        val current = questions.snapshot.find { it.codigo == codigo } ?: return
-        val ordered = questions.snapshot.filter { it.seccionId == current.seccionId }.sortedBy { it.orden }
-        val index = ordered.indexOfFirst { it.codigo == codigo }
-        val neighborIndex = index + delta
-        if (index == -1 || neighborIndex !in ordered.indices) return
-        val neighbor = ordered[neighborIndex]
-        questions.mutate { list ->
-            list.map {
-                when (it.codigo) {
-                    current.codigo -> it.copy(orden = neighbor.orden)
-                    neighbor.codigo -> it.copy(orden = current.orden)
-                    else -> it
-                }
-            }
-        }
+    override suspend fun restaurarEjemplo(tipo: String) {
+        sections.mutate { list -> list.filterNot { it.tipo == tipo } + sectionsFor(tipo) }
+        questions.mutate { list -> list.filterNot { it.tipo == tipo } + questionsFor(tipo) }
     }
 }

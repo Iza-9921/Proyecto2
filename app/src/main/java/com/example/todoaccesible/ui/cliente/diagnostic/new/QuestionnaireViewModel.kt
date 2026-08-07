@@ -113,43 +113,28 @@ class QuestionnaireViewModel(
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    private data class QuestionContent(
-        val sections: List<SectionEntity>,
-        val questions: List<QuestionEntity>,
-        val index: Int,
-        val qa: CurrentQA,
-        val photos: List<PhotoItem>
-    )
-
-    private val questionContent: StateFlow<QuestionContent> = combine(
+    val uiState: StateFlow<QuestionnaireUiState> = combine(
         _sections, _questions, _currentIndex, currentQA, currentPhotos
     ) { sections, questions, index, qa, photos ->
-        QuestionContent(sections, questions, index, qa, photos)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), QuestionContent(emptyList(), emptyList(), 0, CurrentQA(null, null), emptyList()))
-
-    /** Combina el contenido de la pregunta con los diálogos (descartar / borrar foto): ambos deben
-     * poder disparar una recomposición aunque no cambie ninguno de los flows de [questionContent]. */
-    val uiState: StateFlow<QuestionnaireUiState> = combine(
-        questionContent, _showDiscardConfirm, _photoPendingDelete
-    ) { content, showDiscardConfirm, photoPendingDelete ->
         QuestionnaireUiState(
-            loading = content.questions.isEmpty(),
-            sections = content.sections,
-            totalQuestions = content.questions.size,
-            currentIndex = content.index,
-            currentQuestion = content.qa.question,
-            currentAnswerValue = content.qa.answer?.valor,
-            currentComentario = content.qa.answer?.comentario.orEmpty(),
-            currentPhotos = content.photos,
-            showDiscardConfirm = showDiscardConfirm,
-            photoPendingDelete = photoPendingDelete
+            loading = questions.isEmpty(),
+            sections = sections,
+            totalQuestions = questions.size,
+            currentIndex = index,
+            currentQuestion = qa.question,
+            currentAnswerValue = qa.answer?.valor,
+            currentComentario = qa.answer?.comentario.orEmpty(),
+            currentPhotos = photos,
+            showDiscardConfirm = _showDiscardConfirm.value,
+            photoPendingDelete = _photoPendingDelete.value
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), QuestionnaireUiState())
 
     init {
         viewModelScope.launch {
-            _sections.value = questionCatalogRepository.getActiveSections()
-            _questions.value = questionCatalogRepository.getActiveQuestions()
+            val tipo = diagnosticRepository.getById(diagnosticId)?.tipoInmueble?.ifBlank { "Otro" } ?: "Otro"
+            _sections.value = questionCatalogRepository.getAllSections(tipo)
+            _questions.value = questionCatalogRepository.getAllQuestions(tipo)
             moveTo(_currentIndex.value)
         }
     }
@@ -269,25 +254,8 @@ class QuestionnaireViewModel(
     fun openQuestionList() { _showQuestionList.value = true }
     fun dismissQuestionList() { _showQuestionList.value = false }
 
-    /**
-     * Navegación rápida desde el panel "Ver preguntas": solo permite ir a una pregunta ya
-     * respondida (para revisarla o editarla) o a la siguiente pendiente que le corresponde
-     * dentro de su categoría. Bloquea saltos que se adelanten a preguntas anteriores sin
-     * responder, respetando siempre el orden del cuestionario.
-     */
+    /** Navegación rápida desde el panel "Ver preguntas": va directo a la pregunta elegida sin perder respuestas ni fotos. */
     fun goToQuestion(index: Int) {
-        val questions = _questions.value
-        val target = questions.getOrNull(index) ?: return
-        val answers = answersByCode.value
-        val alreadyAnswered = answers[target.codigo]?.valor != null
-        if (!alreadyAnswered) {
-            val sectionQuestions = questions.withIndex().filter { it.value.seccionId == target.seccionId }
-            val firstPendingIndex = sectionQuestions.firstOrNull { answers[it.value.codigo]?.valor == null }?.index
-            if (index != firstPendingIndex) {
-                _submitBlockedMessage.value = "Debes responder las preguntas anteriores antes de continuar."
-                return
-            }
-        }
         moveTo(index)
         dismissQuestionList()
     }

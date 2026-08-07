@@ -11,4 +11,7 @@ interface QuestionReviewRepository {
     suspend fun setStatus(diagnosticId: Long, questionCodigo: String, status: QuestionReviewStatus, reviewerId: Long)
 
     suspend fun setComentario(diagnosticId: Long, questionCodigo: String, comentario: String, reviewerId: Long)
+
+    /** Reabre la validación de una pregunta puntual tras que el cliente reenvía la información solicitada. */
+    suspend fun resetForResubmission(diagnosticId: Long, questionCodigo: String)
 }

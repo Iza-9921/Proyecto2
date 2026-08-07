@@ -16,5 +16,13 @@ data class UserEntity(
      * creado no puede iniciar ningún diagnóstico hasta que el administrador
      * le asigne cupo.
      */
-    val diagnosticosDisponibles: Int? = 0
+    val diagnosticosDisponibles: Int? = 0,
+    /** Fecha de alta de la cuenta; usado para agrupar la lista de usuarios por mes. */
+    val createdAt: Long = System.currentTimeMillis(),
+    /**
+     * Cuestionario (tipo de inmueble) que este cliente debe responder,
+     * asignado manualmente por el admin al activar la cuenta. `null` = aún
+     * no asignado explícitamente (se usa el primer tipo disponible).
+     */
+    val cuestionarioAsignado: String? = null
 )

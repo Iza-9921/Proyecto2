@@ -108,4 +108,8 @@ class UserRepositoryImpl(
     override suspend fun decrementDiagnosticoDisponible(userId: Long) {
         quotaStore.decrement(userId)
     }
+
+    override suspend fun assignCuestionario(userId: Long, tipo: String) {
+        users.mutate { list -> list.map { if (it.id == userId) it.copy(cuestionarioAsignado = tipo) else it } }
+    }
 }

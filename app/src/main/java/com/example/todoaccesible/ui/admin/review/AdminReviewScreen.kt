@@ -38,6 +38,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -85,6 +86,7 @@ fun AdminReviewScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val exportError by viewModel.exportError.collectAsState()
+    val otherViewers by viewModel.otherViewers.collectAsState()
     var expandedPhotoViewer by remember { mutableStateOf<PhotoViewerState?>(null) }
     val context = LocalContext.current
 
@@ -99,7 +101,10 @@ fun AdminReviewScreen(
                 },
                 actions = {
                     IconButton(onClick = { viewModel.exportPdf(context) }) {
-                        Icon(Icons.Filled.PictureAsPdf, contentDescription = "Exportar PDF")
+                        Icon(Icons.Filled.PictureAsPdf, contentDescription = "PDF del cliente")
+                    }
+                    IconButton(onClick = { viewModel.exportPdfDefinitivo(context) }) {
+                        Icon(Icons.Filled.Groups, contentDescription = "PDF del administrador")
                     }
                     IconButton(onClick = { viewModel.exportExcel(context) }) {
                         Icon(Icons.Filled.TableChart, contentDescription = "Exportar Excel")
@@ -109,6 +114,21 @@ fun AdminReviewScreen(
         }
     ) { innerPadding ->
         Column(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+            if (otherViewers.isNotEmpty()) {
+                Text(
+                    text = if (otherViewers.size == 1) {
+                        "${otherViewers.first()} también está revisando este diagnóstico ahora mismo."
+                    } else {
+                        "${otherViewers.joinToString(", ")} también están revisando este diagnóstico ahora mismo."
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.tertiaryContainer)
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+            }
             OutlinedTextField(
                 value = uiState.query,
                 onValueChange = viewModel::setQuery,

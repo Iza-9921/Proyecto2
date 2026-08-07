@@ -1,6 +1,7 @@
 package com.example.todoaccesible.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -14,17 +15,12 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.navArgument
 import com.example.todoaccesible.AppContainer
-import com.example.todoaccesible.ui.admin.compare.CompareDiagnosticsScreen
-import com.example.todoaccesible.ui.admin.compare.CompareDiagnosticsViewModel
 import com.example.todoaccesible.ui.admin.dashboard.AdminDashboardScreen
 import com.example.todoaccesible.ui.admin.dashboard.AdminDashboardViewModel
 import com.example.todoaccesible.ui.admin.pending.AdminPendingScreen
 import com.example.todoaccesible.ui.admin.pending.AdminPendingViewModel
-import com.example.todoaccesible.ui.admin.questions.CategoryManagementViewModel
-import com.example.todoaccesible.ui.admin.questions.CategoryQuestionsScreen
-import com.example.todoaccesible.ui.admin.questions.CategoryQuestionsViewModel
+import com.example.todoaccesible.ui.admin.questions.QuestionCatalogScreen
 import com.example.todoaccesible.ui.admin.questions.QuestionCatalogViewModel
-import com.example.todoaccesible.ui.admin.questions.QuestionManagementScreen
 import com.example.todoaccesible.ui.admin.review.AdminReviewScreen
 import com.example.todoaccesible.ui.admin.review.AdminReviewViewModel
 import com.example.todoaccesible.ui.admin.users.UserManagementScreen
@@ -43,8 +39,11 @@ import com.example.todoaccesible.ui.cliente.diagnostic.new.QuestionnaireScreen
 import com.example.todoaccesible.ui.cliente.diagnostic.new.QuestionnaireViewModel
 import com.example.todoaccesible.ui.cliente.diagnostic.result.DiagnosticResultScreen
 import com.example.todoaccesible.ui.cliente.diagnostic.result.DiagnosticResultViewModel
+import com.example.todoaccesible.ui.cliente.diagnostic.responder.ResponderInfoAdicionalScreen
+import com.example.todoaccesible.ui.cliente.diagnostic.responder.ResponderInfoAdicionalViewModel
 import com.example.todoaccesible.ui.cliente.notifications.NotificationsScreen
 import com.example.todoaccesible.ui.cliente.notifications.NotificationsViewModel
+import com.example.todoaccesible.core.voice.VoiceInstructions
 import kotlinx.coroutines.launch
 
 @Composable
@@ -57,6 +56,15 @@ fun TodoAccesibleNavGraph(
     val session by container.sessionManager.session.collectAsState(initial = null)
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
     val scope = androidx.compose.runtime.rememberCoroutineScope()
+
+    // Al cambiar de ruta: corta cualquier lectura en curso (para no arrastrar el
+    // audio de la pantalla anterior) y carga el texto por defecto de la nueva
+    // pantalla. Las pantallas con pasos internos lo sobreescriben después vía
+    // `container.voiceGuideController.setInstructions(...)` según su estado.
+    LaunchedEffect(currentRoute) {
+        container.voiceGuideController.stop()
+        container.voiceGuideController.setInstructions(VoiceInstructions.forRoute(currentRoute))
+    }
 
     fun logout() {
         scope.launch {
@@ -125,7 +133,16 @@ fun TodoAccesibleNavGraph(
         composable(Routes.ProjectInfo.route) {
             val clienteId = session?.userId ?: return@composable
             val viewModel: ProjectInfoViewModel = viewModel(
-                factory = viewModelFactory { initializer { ProjectInfoViewModel(container.diagnosticRepository, clienteId) } }
+                factory = viewModelFactory {
+                    initializer {
+                        ProjectInfoViewModel(
+                            container.diagnosticRepository,
+                            container.userRepository,
+                            container.tipoCuestionarioRepository,
+                            clienteId
+                        )
+                    }
+                }
             )
             ProjectInfoScreen(
                 viewModel = viewModel,
@@ -168,7 +185,7 @@ fun TodoAccesibleNavGraph(
             val viewModel: DiagnosticResultViewModel = viewModel(
                 factory = viewModelFactory {
                     initializer {
-                        DiagnosticResultViewModel(diagnosticId, container.diagnosticRepository)
+                        DiagnosticResultViewModel(diagnosticId, container.diagnosticRepository, container.questionCatalogRepository)
                     }
                 }
             )
@@ -203,7 +220,33 @@ fun TodoAccesibleNavGraph(
             )
             DiagnosticDetailScreen(
                 viewModel = viewModel,
-                onNavigateBack = { navController.popBackStack() }
+                onNavigateBack = { navController.popBackStack() },
+                onResponderInfoAdicional = { navController.navigate(Routes.ResponderInfoAdicional.build(diagnosticId)) }
+            )
+        }
+
+        composable(
+            route = Routes.ResponderInfoAdicional.route,
+            arguments = listOf(navArgument(Routes.ARG_DIAGNOSTIC_ID) { type = NavType.LongType })
+        ) { backStackEntry ->
+            val diagnosticId = backStackEntry.arguments?.getLong(Routes.ARG_DIAGNOSTIC_ID) ?: return@composable
+            val viewModel: ResponderInfoAdicionalViewModel = viewModel(
+                factory = viewModelFactory {
+                    initializer {
+                        ResponderInfoAdicionalViewModel(
+                            diagnosticId,
+                            container.diagnosticRepository,
+                            container.questionCatalogRepository,
+                            container.questionReviewRepository
+                        )
+                    }
+                }
+            )
+            ResponderInfoAdicionalScreen(
+                viewModel = viewModel,
+                onNavigateBack = { navController.popBackStack() },
+                onNotAllowed = { navController.popBackStack() },
+                onReenviado = { navController.popBackStack() }
             )
         }
 
@@ -227,17 +270,31 @@ fun TodoAccesibleNavGraph(
 
         composable(Routes.AdminDashboard.route) {
             val viewModel: AdminDashboardViewModel = viewModel(
-                factory = viewModelFactory { initializer { AdminDashboardViewModel(container.diagnosticRepository) } }
+                factory = viewModelFactory {
+                    initializer { AdminDashboardViewModel(container.diagnosticRepository) }
+                }
             )
             AdminShell(navController, currentRoute) {
-                AdminDashboardScreen(viewModel = viewModel, onLogout = ::logout)
+                AdminDashboardScreen(
+                    viewModel = viewModel,
+                    onLogout = ::logout
+                )
             }
         }
 
         composable(Routes.AdminUsers.route) {
             val viewModel: UserManagementViewModel = viewModel(
                 factory = viewModelFactory {
-                    initializer { UserManagementViewModel(container.userRepository, container.activeSessionRegistry) }
+                    initializer {
+                        UserManagementViewModel(
+                            container.userRepository,
+                            container.activeSessionRegistry,
+                            container.diagnosticRepository,
+                            container.tipoCuestionarioRepository,
+                            container.notificationRepository,
+                            container.toastController
+                        )
+                    }
                 }
             )
             AdminShell(navController, currentRoute) {
@@ -246,39 +303,24 @@ fun TodoAccesibleNavGraph(
         }
 
         composable(Routes.AdminQuestions.route) {
-            val questionViewModel: QuestionCatalogViewModel = viewModel(
-                factory = viewModelFactory { initializer { QuestionCatalogViewModel(container.questionCatalogRepository) } }
-            )
-            val categoryViewModel: CategoryManagementViewModel = viewModel(
-                factory = viewModelFactory { initializer { CategoryManagementViewModel(container.questionCatalogRepository) } }
+            val viewModel: QuestionCatalogViewModel = viewModel(
+                factory = viewModelFactory {
+                    initializer { QuestionCatalogViewModel(container.questionCatalogRepository, container.tipoCuestionarioRepository) }
+                }
             )
             AdminShell(navController, currentRoute) {
-                QuestionManagementScreen(
-                    categoryViewModel = categoryViewModel,
-                    questionViewModel = questionViewModel,
-                    onOpenCategory = { sectionId -> navController.navigate(Routes.AdminCategoryQuestions.build(sectionId)) }
-                )
+                QuestionCatalogScreen(viewModel = viewModel)
             }
         }
 
-        composable(
-            route = Routes.AdminCategoryQuestions.route,
-            arguments = listOf(navArgument(Routes.ARG_SECTION_ID) { type = NavType.StringType })
-        ) { backStackEntry ->
-            val sectionId = backStackEntry.arguments?.getString(Routes.ARG_SECTION_ID) ?: return@composable
-            val viewModel: CategoryQuestionsViewModel = viewModel(
-                factory = viewModelFactory { initializer { CategoryQuestionsViewModel(sectionId, container.questionCatalogRepository) } }
-            )
-            CategoryQuestionsScreen(
-                sectionId = sectionId,
-                viewModel = viewModel,
-                onNavigateBack = { navController.popBackStack() }
-            )
-        }
-
         composable(Routes.AdminPending.route) {
+            session?.userId ?: return@composable
             val viewModel: AdminPendingViewModel = viewModel(
-                factory = viewModelFactory { initializer { AdminPendingViewModel(container.diagnosticRepository, container.userRepository) } }
+                factory = viewModelFactory {
+                    initializer {
+                        AdminPendingViewModel(container.diagnosticRepository, container.userRepository)
+                    }
+                }
             )
             AdminShell(navController, currentRoute) {
                 AdminPendingScreen(
@@ -304,21 +346,13 @@ fun TodoAccesibleNavGraph(
                             container.questionCatalogRepository,
                             container.diagnosticHistoryRepository,
                             container.userRepository,
-                            container.questionReviewRepository
+                            container.questionReviewRepository,
+                            container.presenceRepository
                         )
                     }
                 }
             )
             AdminReviewScreen(viewModel = viewModel, onNavigateBack = { navController.popBackStack() })
-        }
-
-        composable(Routes.AdminCompare.route) {
-            val viewModel: CompareDiagnosticsViewModel = viewModel(
-                factory = viewModelFactory { initializer { CompareDiagnosticsViewModel(container.diagnosticRepository) } }
-            )
-            AdminShell(navController, currentRoute) {
-                CompareDiagnosticsScreen(viewModel = viewModel)
-            }
         }
     }
 }
