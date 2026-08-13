@@ -15,7 +15,7 @@ enum class ThemePreference { LIGHT, DARK, SYSTEM }
 
 /**
  * Preferencia de tema claro/oscuro, persistida en DataStore (mismo
- * mecanismo que [SessionManager]/[DiagnosticQuotaStore]) para sobrevivir a
+ * mecanismo que [SessionManager]) para sobrevivir a
  * que se cierre la app. Equivalente offline a `localStorage['theme']` en la
  * web (`ThemeContext.jsx`): por defecto sigue el tema del sistema hasta que
  * el usuario toca el botón de alternar, momento en que se guarda una

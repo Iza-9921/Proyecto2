@@ -3,6 +3,8 @@ package com.example.todoaccesible.ui.cliente.diagnostic.new
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.todoaccesible.data.local.seed.MexicoLocations
+import com.example.todoaccesible.data.remote.ApiError
+import com.example.todoaccesible.data.remote.ApiErrorMapper
 import com.example.todoaccesible.data.repository.DiagnosticRepository
 import com.example.todoaccesible.data.repository.TipoCuestionarioRepository
 import com.example.todoaccesible.data.repository.UserRepository
@@ -26,7 +28,9 @@ data class ProjectInfoUiState(
     val logoEmpresaUri: String? = null,
     val loading: Boolean = true,
     /** El borrador ya traía datos capturados: se le pregunta al cliente si quiere continuarlo o empezar de nuevo. */
-    val showResumeDialog: Boolean = false
+    val showResumeDialog: Boolean = false,
+    val submitting: Boolean = false,
+    val error: String? = null
 ) {
     val ciudadesDisponibles: List<String> get() = MexicoLocations.ciudadesDe(entidadFederativa)
 }
@@ -113,21 +117,37 @@ class ProjectInfoViewModel(
         val state = _uiState.value
         val id = state.diagnosticId ?: return
         viewModelScope.launch {
-            diagnosticRepository.updateProjectInfo(
-                diagnosticId = id,
-                projectName = state.projectName,
-                ubicacion = state.ubicacion,
-                responsable = state.responsable,
-                revision = state.revision,
-                clienteNombre = state.clienteNombre,
-                telefono = state.telefono,
-                entidadFederativa = state.entidadFederativa,
-                ciudad = state.ciudad,
-                tipoInmueble = state.tipoInmueble,
-                fechaEvaluacion = state.fechaEvaluacion,
-                logoEmpresaUri = state.logoEmpresaUri
-            )
-            onReady(id)
+            _uiState.value = _uiState.value.copy(submitting = true, error = null)
+            try {
+                diagnosticRepository.updateProjectInfo(
+                    diagnosticId = id,
+                    projectName = state.projectName,
+                    ubicacion = state.ubicacion,
+                    responsable = state.responsable,
+                    revision = state.revision,
+                    clienteNombre = state.clienteNombre,
+                    telefono = state.telefono,
+                    entidadFederativa = state.entidadFederativa,
+                    ciudad = state.ciudad,
+                    tipoInmueble = state.tipoInmueble,
+                    fechaEvaluacion = state.fechaEvaluacion,
+                    logoEmpresaUri = state.logoEmpresaUri
+                )
+                _uiState.value = _uiState.value.copy(submitting = false)
+                onReady(id)
+            } catch (e: Exception) {
+                val mapped = ApiErrorMapper.from(e)
+                val message = if (mapped is ApiError.LicenciaVencida) {
+                    "Tu licencia está vencida o inactiva: contacta al administrador para poder iniciar un diagnóstico."
+                } else {
+                    mapped.message
+                }
+                _uiState.value = _uiState.value.copy(submitting = false, error = message)
+            }
         }
+    }
+
+    fun dismissError() {
+        _uiState.value = _uiState.value.copy(error = null)
     }
 }

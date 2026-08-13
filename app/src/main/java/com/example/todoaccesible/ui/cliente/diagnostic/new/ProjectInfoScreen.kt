@@ -86,6 +86,14 @@ fun ProjectInfoScreen(
                 showRevision = false
             )
 
+            if (uiState.error != null) {
+                Text(
+                    text = uiState.error ?: "",
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+
             Row(
                 modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -96,8 +104,8 @@ fun ProjectInfoScreen(
                     modifier = Modifier.weight(1f)
                 )
                 BigTouchButton(
-                    text = "Comenzar cuestionario",
-                    enabled = !uiState.loading && uiState.projectName.isNotBlank(),
+                    text = if (uiState.submitting) "Guardando…" else "Comenzar cuestionario",
+                    enabled = !uiState.loading && !uiState.submitting && uiState.projectName.isNotBlank(),
                     onClick = { viewModel.continueToQuestionnaire(onContinue) },
                     modifier = Modifier.weight(1f)
                 )

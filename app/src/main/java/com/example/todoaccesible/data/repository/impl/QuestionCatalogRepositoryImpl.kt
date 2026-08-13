@@ -1,88 +1,111 @@
 package com.example.todoaccesible.data.repository.impl
 
+import com.example.todoaccesible.core.designsystem.ToastController
+import com.example.todoaccesible.core.designsystem.ToastTipo
 import com.example.todoaccesible.data.local.entities.QuestionEntity
 import com.example.todoaccesible.data.local.entities.SectionEntity
-import com.example.todoaccesible.data.local.memory.InMemoryTable
-import com.example.todoaccesible.data.local.seed.CuestionarioEjemploSeeder
-import com.example.todoaccesible.data.local.seed.QuestionCatalogSeeder
 import com.example.todoaccesible.data.model.Credito
+import com.example.todoaccesible.data.preferences.SessionManager
+import com.example.todoaccesible.data.remote.ApiErrorMapper
+import com.example.todoaccesible.data.remote.CategoriaApiService
+import com.example.todoaccesible.data.remote.dto.PreguntaRequest
+import com.example.todoaccesible.data.remote.dto.SeccionRequest
+import com.example.todoaccesible.data.remote.mapper.questionEntities
+import com.example.todoaccesible.data.remote.mapper.toBackend
+import com.example.todoaccesible.data.remote.mapper.toCredito
+import com.example.todoaccesible.data.remote.mapper.toEntity
 import com.example.todoaccesible.data.repository.QuestionCatalogRepository
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.flow.update
+import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Catálogo multi-tipo: cada "tipo de inmueble" tiene su propio set
- * independiente de secciones/preguntas (equivalente a `scorecardStore.js`
- * en la web). Se guarda todo en dos tablas planas filtradas por `tipo` en
- * cada lectura -- más simple que separar una tabla por tipo, y evita
- * reestructurar `InMemoryTable`. Sembrado al construirse para los tipos
- * fijos por defecto ([TipoCuestionarioRepositoryImpl.defaultTipos]): "Otro"
- * con el catálogo fijo de 187 preguntas, el resto con su set de ejemplo. Un
- * tipo creado luego por el admin arranca vacío (se agrega vía [addSeccion]).
+ * Catálogo por tipo de inmueble, respaldado por `GET /categorias?tipo=`
+ * (siempre con el query `tipo`, nunca la variante sin filtro). Cachea por
+ * `tipo` en dos `StateFlow` (secciones/preguntas), sembrados on-demand la
+ * primera vez que se pide un `tipo` y refrescados por completo tras cada
+ * mutación (más simple y menos propenso a errores que actualizar campo por
+ * campo en memoria).
  */
 class QuestionCatalogRepositoryImpl(
-    private val sections: InMemoryTable<SectionEntity> = InMemoryTable(seedAllSections()),
-    private val questions: InMemoryTable<QuestionEntity> = InMemoryTable(seedAllQuestions())
+    private val categoriaApi: CategoriaApiService,
+    private val sessionManager: SessionManager,
+    private val toastController: ToastController
 ) : QuestionCatalogRepository {
 
-    companion object {
-        private fun seedAllSections(): List<SectionEntity> =
-            TipoCuestionarioRepositoryImpl.defaultTipos().flatMap { sectionsFor(it.nombre) }
+    private val _sections = MutableStateFlow<Map<String, List<SectionEntity>>>(emptyMap())
+    private val _questions = MutableStateFlow<Map<String, List<QuestionEntity>>>(emptyMap())
+    private val loadedTipos = ConcurrentHashMap.newKeySet<String>()
 
-        private fun seedAllQuestions(): List<QuestionEntity> =
-            TipoCuestionarioRepositoryImpl.defaultTipos().flatMap { questionsFor(it.nombre) }
+    override fun observeSections(tipo: String): Flow<List<SectionEntity>> =
+        _sections.onStart { ensureLoaded(tipo) }.map { map -> map[tipo].orEmpty().sortedBy { it.orden } }
 
-        private fun sectionsFor(tipo: String): List<SectionEntity> = when {
-            tipo == QuestionCatalogSeeder.TIPO -> QuestionCatalogSeeder.sectionEntities(tipo)
-            CuestionarioEjemploSeeder.tieneEjemplo(tipo) -> CuestionarioEjemploSeeder.sectionEntities(tipo)
-            else -> emptyList()
-        }
+    override suspend fun getAllSections(tipo: String): List<SectionEntity> {
+        ensureLoaded(tipo)
+        return _sections.value[tipo].orEmpty().sortedBy { it.orden }
+    }
 
-        private fun questionsFor(tipo: String): List<QuestionEntity> = when {
-            tipo == QuestionCatalogSeeder.TIPO -> QuestionCatalogSeeder.questionEntities(tipo)
-            CuestionarioEjemploSeeder.tieneEjemplo(tipo) -> CuestionarioEjemploSeeder.questionEntities(tipo)
-            else -> emptyList()
+    override fun observeQuestions(tipo: String): Flow<List<QuestionEntity>> =
+        _questions.onStart { ensureLoaded(tipo) }.map { map -> map[tipo].orEmpty().sortedBy { it.orden } }
+
+    override suspend fun getAllQuestions(tipo: String): List<QuestionEntity> {
+        ensureLoaded(tipo)
+        return _questions.value[tipo].orEmpty().sortedBy { it.orden }
+    }
+
+    override suspend fun getQuestionsForSection(tipo: String, sectionId: String): List<QuestionEntity> =
+        getAllQuestions(tipo).filter { it.seccionId == sectionId }
+
+    private suspend fun ensureLoaded(tipo: String) {
+        if (tipo.isBlank() || !loadedTipos.add(tipo)) return
+        refresh(tipo)
+    }
+
+    private suspend fun refresh(tipo: String) {
+        try {
+            val secciones = categoriaApi.listar(tipo)
+            _sections.update { it + (tipo to secciones.map { s -> s.toEntity(tipo) }) }
+            _questions.update { it + (tipo to secciones.flatMap { s -> s.questionEntities(tipo) }) }
+        } catch (e: Exception) {
+            loadedTipos.remove(tipo)
+            reportError(e)
         }
     }
 
-    override fun observeSections(tipo: String) =
-        sections.flow.map { list -> list.filter { it.tipo == tipo }.sortedBy { it.orden } }
-
-    override suspend fun getAllSections(tipo: String) =
-        sections.snapshot.filter { it.tipo == tipo }.sortedBy { it.orden }
-
-    override fun observeQuestions(tipo: String) =
-        questions.flow.map { list -> list.filter { it.tipo == tipo }.sortedBy { it.orden } }
-
-    override suspend fun getAllQuestions(tipo: String) =
-        questions.snapshot.filter { it.tipo == tipo }.sortedBy { it.orden }
-
-    override suspend fun getQuestionsForSection(tipo: String, sectionId: String) =
-        questions.snapshot.filter { it.tipo == tipo && it.seccionId == sectionId }.sortedBy { it.orden }
-
     override suspend fun updateQuestion(question: QuestionEntity) {
-        questions.mutate { list -> list.map { if (it.tipo == question.tipo && it.codigo == question.codigo) question else it } }
+        val preguntaId = question.codigo.toLongOrNull() ?: return
+        val seccionId = question.seccionId.toLongOrNull() ?: return
+        runMutation(question.tipo) {
+            categoriaApi.actualizarPregunta(
+                seccionId, preguntaId,
+                PreguntaRequest(
+                    concepto = question.concepto,
+                    credito = question.credito.toBackend(),
+                    foto = question.admiteFoto,
+                    descripcion = question.descripcion,
+                    imagenEjemplo = question.imagenEjemplo
+                )
+            )
+        }
     }
 
     override suspend fun addSeccion(tipo: String, icono: String, tituloLargo: String, tituloCorto: String): SectionEntity {
-        val existentes = sections.snapshot.filter { it.tipo == tipo }
-        val siguienteOrden = (existentes.maxOfOrNull { it.orden } ?: -1) + 1
-        val id = "seccion_${sections.nextId()}"
-        val nueva = SectionEntity(id = id, tipo = tipo, nombre = tituloLargo, orden = siguienteOrden, icono = icono, tituloCorto = tituloCorto)
-        sections.mutate { it + nueva }
-        return nueva
+        val dto = categoriaApi.crearSeccion(tipo, SeccionRequest(icono = icono, tituloLargo = tituloLargo, tituloCorto = tituloCorto))
+        refresh(tipo)
+        return dto.toEntity(tipo)
     }
 
     override suspend fun updateSeccion(tipo: String, seccionId: String, icono: String, tituloLargo: String, tituloCorto: String) {
-        sections.mutate { list ->
-            list.map {
-                if (it.tipo == tipo && it.id == seccionId) it.copy(nombre = tituloLargo, icono = icono, tituloCorto = tituloCorto) else it
-            }
-        }
+        val id = seccionId.toLongOrNull() ?: return
+        runMutation(tipo) { categoriaApi.actualizarSeccion(id, SeccionRequest(icono = icono, tituloLargo = tituloLargo, tituloCorto = tituloCorto)) }
     }
 
     override suspend fun deleteSeccion(tipo: String, seccionId: String) {
-        sections.mutate { list -> list.filterNot { it.tipo == tipo && it.id == seccionId } }
-        questions.mutate { list -> list.filterNot { it.tipo == tipo && it.seccionId == seccionId } }
+        val id = seccionId.toLongOrNull() ?: return
+        runMutation(tipo) { categoriaApi.eliminarSeccion(id) }
     }
 
     override suspend fun addPregunta(
@@ -94,31 +117,47 @@ class QuestionCatalogRepositoryImpl(
         descripcion: String,
         imagenEjemplo: String?
     ): QuestionEntity {
-        val delaSeccion = questions.snapshot.filter { it.tipo == tipo && it.seccionId == seccionId }
-        val siguienteNumero = delaSeccion.size + 1
-        val codigo = "$seccionId.${siguienteNumero.toString().padStart(2, '0')}"
-        val siguienteOrden = (questions.snapshot.filter { it.tipo == tipo }.maxOfOrNull { it.orden } ?: -1) + 1
-        val nueva = QuestionEntity(
-            codigo = codigo,
-            tipo = tipo,
-            seccionId = seccionId,
-            concepto = concepto,
-            credito = credito,
-            admiteFoto = admiteFoto,
-            orden = siguienteOrden,
-            descripcion = descripcion,
-            imagenEjemplo = imagenEjemplo
+        val id = seccionId.toLongOrNull()
+            ?: return QuestionEntity(codigo = "", tipo = tipo, seccionId = seccionId, concepto = concepto, credito = credito, admiteFoto = admiteFoto, orden = 0)
+        val dto = try {
+            categoriaApi.crearPregunta(id, PreguntaRequest(concepto = concepto, credito = credito.toBackend(), foto = admiteFoto, descripcion = descripcion, imagenEjemplo = imagenEjemplo))
+        } catch (e: Exception) {
+            reportError(e)
+            return QuestionEntity(codigo = "", tipo = tipo, seccionId = seccionId, concepto = concepto, credito = credito, admiteFoto = admiteFoto, orden = 0)
+        }
+        refresh(tipo)
+        return QuestionEntity(
+            codigo = dto.id.toString(), tipo = tipo, seccionId = seccionId, concepto = dto.concepto,
+            credito = dto.credito.toCredito(), admiteFoto = dto.foto, orden = _questions.value[tipo].orEmpty().size,
+            descripcion = dto.descripcion.orEmpty(), imagenEjemplo = dto.imagenEjemplo
         )
-        questions.mutate { it + nueva }
-        return nueva
     }
 
     override suspend fun deletePregunta(tipo: String, codigo: String) {
-        questions.mutate { list -> list.filterNot { it.tipo == tipo && it.codigo == codigo } }
+        val question = _questions.value[tipo].orEmpty().find { it.codigo == codigo } ?: return
+        val seccionId = question.seccionId.toLongOrNull() ?: return
+        val preguntaId = codigo.toLongOrNull() ?: return
+        runMutation(tipo) { categoriaApi.eliminarPregunta(seccionId, preguntaId) }
     }
 
-    override suspend fun restaurarEjemplo(tipo: String) {
-        sections.mutate { list -> list.filterNot { it.tipo == tipo } + sectionsFor(tipo) }
-        questions.mutate { list -> list.filterNot { it.tipo == tipo } + questionsFor(tipo) }
+    /**
+     * No hay equivalente en el backend para "restaurar el catálogo de
+     * ejemplo": el botón correspondiente ya no existe en `QuestionCatalogScreen`
+     * (ver Fase 6). Se deja como no-op para no romper la firma de la interfaz.
+     */
+    override suspend fun restaurarEjemplo(tipo: String) = Unit
+
+    private suspend fun runMutation(tipo: String, block: suspend () -> Unit) {
+        try {
+            block()
+            refresh(tipo)
+        } catch (e: Exception) {
+            reportError(e)
+        }
+    }
+
+    private suspend fun reportError(e: Exception) {
+        val mapped = ApiErrorMapper.handle(e, sessionManager)
+        toastController.show(mapped.message, ToastTipo.ERROR)
     }
 }

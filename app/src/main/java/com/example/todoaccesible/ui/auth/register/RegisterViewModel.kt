@@ -3,6 +3,8 @@ package com.example.todoaccesible.ui.auth.register
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.todoaccesible.data.local.seed.MexicoLocations
+import com.example.todoaccesible.data.remote.ApiError
+import com.example.todoaccesible.data.remote.ApiErrorMapper
 import com.example.todoaccesible.data.repository.AuthRepository
 import com.example.todoaccesible.data.repository.AuthResult
 import com.example.todoaccesible.data.repository.DiagnosticRepository
@@ -104,20 +106,34 @@ class RegisterViewModel(
             when (val result = authRepository.register(state.nombre, state.email, state.password)) {
                 is AuthResult.Success -> {
                     val draft = diagnosticRepository.getOrCreateDraft(result.session.userId)
-                    diagnosticRepository.updateProjectInfo(
-                        diagnosticId = draft.id,
-                        projectName = state.projectName,
-                        ubicacion = state.ubicacion,
-                        responsable = state.responsable,
-                        revision = state.revision,
-                        clienteNombre = state.clienteNombre,
-                        telefono = state.telefono,
-                        entidadFederativa = state.entidadFederativa,
-                        ciudad = state.ciudad,
-                        tipoInmueble = state.tipoInmueble,
-                        fechaEvaluacion = state.fechaEvaluacion,
-                        logoEmpresaUri = state.logoEmpresaUri
-                    )
+                    try {
+                        diagnosticRepository.updateProjectInfo(
+                            diagnosticId = draft.id,
+                            projectName = state.projectName,
+                            ubicacion = state.ubicacion,
+                            responsable = state.responsable,
+                            revision = state.revision,
+                            clienteNombre = state.clienteNombre,
+                            telefono = state.telefono,
+                            entidadFederativa = state.entidadFederativa,
+                            ciudad = state.ciudad,
+                            tipoInmueble = state.tipoInmueble,
+                            fechaEvaluacion = state.fechaEvaluacion,
+                            logoEmpresaUri = state.logoEmpresaUri
+                        )
+                    } catch (e: Exception) {
+                        // La cuenta ya se creó (register tuvo éxito); solo falló crear el proyecto/diagnóstico
+                        // en el backend (p.ej. 403 licencia vencida/inactiva). Se deja el mensaje visible y el
+                        // borrador se completa más tarde desde "Nuevo diagnóstico" en el dashboard.
+                        val mapped = ApiErrorMapper.from(e)
+                        val message = if (mapped is ApiError.LicenciaVencida) {
+                            "Tu cuenta se creó, pero tu licencia está vencida o inactiva: contacta al administrador para poder iniciar un diagnóstico."
+                        } else {
+                            mapped.message
+                        }
+                        _uiState.value = _uiState.value.copy(loading = false, error = message)
+                        return@launch
+                    }
                     val disponibles = userRepository.observeById(result.session.userId).firstOrNull()?.diagnosticosDisponibles
                     if (disponibles != null && disponibles <= 0) {
                         _uiState.value = _uiState.value.copy(loading = false, quotaBlocked = true)
@@ -129,8 +145,6 @@ class RegisterViewModel(
                 is AuthResult.Error -> {
                     _uiState.value = _uiState.value.copy(loading = false, error = result.message)
                 }
-                // register() nunca produce conflicto de sesión (RF-18 solo aplica a login).
-                is AuthResult.SessionConflict -> Unit
             }
         }
     }

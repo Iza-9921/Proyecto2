@@ -1,40 +1,63 @@
 package com.example.todoaccesible.data.repository.impl
 
-import com.example.todoaccesible.data.local.entities.TipoCuestionarioEntity
-import com.example.todoaccesible.data.local.memory.InMemoryTable
+import com.example.todoaccesible.core.designsystem.ToastController
+import com.example.todoaccesible.core.designsystem.ToastTipo
+import com.example.todoaccesible.data.preferences.SessionManager
+import com.example.todoaccesible.data.remote.ApiErrorMapper
+import com.example.todoaccesible.data.remote.TipoInmuebleApiService
+import com.example.todoaccesible.data.remote.dto.TipoInmuebleRequest
 import com.example.todoaccesible.data.repository.TipoCuestionarioRepository
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.onStart
+import java.util.concurrent.atomic.AtomicBoolean
 
 class TipoCuestionarioRepositoryImpl(
-    private val tipos: InMemoryTable<TipoCuestionarioEntity> = InMemoryTable(defaultTipos())
+    private val tipoInmuebleApi: TipoInmuebleApiService,
+    private val sessionManager: SessionManager,
+    private val toastController: ToastController
 ) : TipoCuestionarioRepository {
 
-    companion object {
-        /** Mismo set de tipos fijos que la web (`TIPOS_INMUEBLE` en categoriasMock.js). */
-        fun defaultTipos(): List<TipoCuestionarioEntity> = listOf(
-            "Edificio de oficinas",
-            "Comercio",
-            "Vivienda unifamiliar",
-            "Edificio residencial",
-            "Espacio público",
-            "Local comercial",
-            "Otro"
-        ).mapIndexed { index, nombre -> TipoCuestionarioEntity(nombre = nombre, orden = index) }
+    private val _tipos = MutableStateFlow<List<String>>(emptyList())
+    private val loaded = AtomicBoolean(false)
+
+    override fun observeTipos(): Flow<List<String>> = _tipos.onStart { if (loaded.compareAndSet(false, true)) refresh() }
+
+    override suspend fun getTipos(): List<String> {
+        if (loaded.compareAndSet(false, true)) refresh()
+        return _tipos.value
     }
 
-    override fun observeTipos() = tipos.flow.map { list -> list.sortedBy { it.orden }.map { it.nombre } }
-
-    override suspend fun getTipos(): List<String> = tipos.snapshot.sortedBy { it.orden }.map { it.nombre }
+    private suspend fun refresh() {
+        try {
+            _tipos.value = tipoInmuebleApi.listar()
+        } catch (e: Exception) {
+            loaded.set(false)
+            reportError(e)
+        }
+    }
 
     override suspend fun addTipo(nombre: String) {
         val limpio = nombre.trim()
-        if (limpio.isEmpty() || tipos.snapshot.any { it.nombre == limpio }) return
-        val siguienteOrden = (tipos.snapshot.maxOfOrNull { it.orden } ?: -1) + 1
-        tipos.mutate { it + TipoCuestionarioEntity(nombre = limpio, orden = siguienteOrden) }
+        if (limpio.isEmpty() || _tipos.value.contains(limpio)) return
+        try {
+            _tipos.value = tipoInmuebleApi.agregar(TipoInmuebleRequest(limpio))
+        } catch (e: Exception) {
+            reportError(e)
+        }
     }
 
     override suspend fun deleteTipo(nombre: String) {
-        if (tipos.snapshot.size <= 1) return
-        tipos.mutate { list -> list.filterNot { it.nombre == nombre } }
+        if (_tipos.value.size <= 1) return
+        try {
+            _tipos.value = tipoInmuebleApi.eliminar(nombre)
+        } catch (e: Exception) {
+            reportError(e)
+        }
+    }
+
+    private suspend fun reportError(e: Exception) {
+        val mapped = ApiErrorMapper.handle(e, sessionManager)
+        toastController.show(mapped.message, ToastTipo.ERROR)
     }
 }

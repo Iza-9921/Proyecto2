@@ -80,10 +80,6 @@ fun QuestionCatalogScreen(viewModel: QuestionCatalogViewModel) {
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    TextButton(onClick = { viewModel.openDialog(QuestionCatalogDialog.RestaurarEjemplo) }) {
-                        Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Text("Restaurar preguntas de ejemplo", modifier = Modifier.padding(start = 4.dp))
-                    }
                     TextButton(
                         onClick = { viewModel.openDialog(QuestionCatalogDialog.DeleteTipo) },
                         enabled = uiState.puedeEliminarTipo
@@ -132,20 +128,15 @@ fun QuestionCatalogScreen(viewModel: QuestionCatalogViewModel) {
             onConfirm = viewModel::confirmCreateTipo,
             onDismiss = viewModel::closeDialog
         )
+        // El botón que abría este diálogo ya no existe (no hay endpoint de backend para "restaurar
+        // ejemplo"); se deja el branch solo para que el `when` siga siendo exhaustivo.
+        is QuestionCatalogDialog.RestaurarEjemplo -> Unit
         is QuestionCatalogDialog.DeleteTipo -> ConfirmDialog(
             title = "Eliminar cuestionario",
             message = "Se eliminará \"${uiState.selectedTipo}\" junto con todas sus secciones y preguntas. Esta acción no se puede deshacer.",
             confirmLabel = "Eliminar",
             isDestructive = true,
             onConfirm = viewModel::confirmDeleteTipo,
-            onDismiss = viewModel::closeDialog
-        )
-        is QuestionCatalogDialog.RestaurarEjemplo -> ConfirmDialog(
-            title = "Restaurar preguntas de ejemplo",
-            message = "Se reemplazarán las secciones y preguntas actuales de \"${uiState.selectedTipo}\" por el set de ejemplo. Esta acción no se puede deshacer.",
-            confirmLabel = "Restaurar",
-            isDestructive = true,
-            onConfirm = viewModel::confirmRestaurarEjemplo,
             onDismiss = viewModel::closeDialog
         )
         is QuestionCatalogDialog.AddSection -> SeccionDialog(

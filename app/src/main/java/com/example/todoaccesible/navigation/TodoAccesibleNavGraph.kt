@@ -75,6 +75,15 @@ fun TodoAccesibleNavGraph(
         }
     }
 
+    // Fase 9: si un 401 real (ya intentado refrescar y falló) cierra la sesión local
+    // -ver ApiErrorMapper.handle/TokenAuthenticator-, aquí se detecta y se fuerza la
+    // navegación a Login, sin importar en qué pantalla estaba el usuario.
+    LaunchedEffect(session) {
+        if (session == null && currentRoute != null && currentRoute != Routes.Login.route && currentRoute != Routes.Register.route) {
+            navController.navigate(Routes.Login.route) { popUpTo(0) }
+        }
+    }
+
     NavHost(navController = navController, startDestination = startDestination, modifier = modifier) {
         composable(Routes.Login.route) {
             val viewModel: LoginViewModel = viewModel(
@@ -288,10 +297,8 @@ fun TodoAccesibleNavGraph(
                     initializer {
                         UserManagementViewModel(
                             container.userRepository,
-                            container.activeSessionRegistry,
                             container.diagnosticRepository,
                             container.tipoCuestionarioRepository,
-                            container.notificationRepository,
                             container.toastController
                         )
                     }

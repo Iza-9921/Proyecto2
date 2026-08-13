@@ -16,6 +16,12 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // IP de la PC en la red Wi-Fi local: funciona tanto desde un celular físico
+        // en la misma red como desde el emulador (que puede llegar a la LAN del host).
+        // Si cambia la IP de la PC (DHCP), hay que actualizar esto.
+        buildConfigField("String", "API_BASE_URL", "\"http://192.168.0.69:3001/api/\"")
+        buildConfigField("String", "SOCKET_BASE_URL", "\"http://192.168.0.69:3001/\"")
     }
 
     buildTypes {
@@ -39,6 +45,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     packaging {
         resources {
@@ -60,9 +67,21 @@ dependencies {
     // Iconos de Material
     implementation(libs.androidx.compose.material.icons.extended)
 
-    // Retrofit (capa de red reservada para cuando exista el backend)
+    // Retrofit / red
     implementation(libs.retrofit)
     implementation(libs.retrofit.gson)
+    implementation(libs.kotlinx.coroutines.android)
+    // NOTA: originalmente `debugImplementation`, cambiado a `implementation` porque
+    // NetworkModule.kt (código compartido debug/release) referencia HttpLoggingInterceptor
+    // directamente -aunque solo la ACTIVA en tiempo de ejecución si BuildConfig.DEBUG-, y
+    // `debugImplementation` no está en el classpath de compilación de la variante release
+    // (rompía `compileReleaseKotlin` / `./gradlew test`, que corre ambas variantes).
+    implementation(libs.okhttp.logging.interceptor)
+
+    // Socket.IO (notificaciones/estado en vivo)
+    implementation(libs.socket.io.client) {
+        exclude(group = "org.json", module = "json")
+    }
 
     // DataStore
     implementation(libs.datastore.preferences)

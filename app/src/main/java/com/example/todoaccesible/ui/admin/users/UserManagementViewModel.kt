@@ -6,13 +6,10 @@ import com.example.todoaccesible.core.designsystem.ToastController
 import com.example.todoaccesible.core.designsystem.ToastTipo
 import com.example.todoaccesible.data.local.entities.DiagnosticEntity
 import com.example.todoaccesible.data.local.entities.UserEntity
-import com.example.todoaccesible.data.model.DiagnosticStatus
-import com.example.todoaccesible.data.model.Role
-import com.example.todoaccesible.data.preferences.ActiveSessionRegistry
 import com.example.todoaccesible.data.repository.DiagnosticRepository
-import com.example.todoaccesible.data.repository.NotificationRepository
 import com.example.todoaccesible.data.repository.TipoCuestionarioRepository
 import com.example.todoaccesible.data.repository.UserRepository
+import com.example.todoaccesible.data.model.Role
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -24,13 +21,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.Calendar
-
-data class NewUserForm(
-    val nombre: String = "",
-    val email: String = "",
-    val password: String = "",
-    val rol: Role = Role.CLIENTE
-)
 
 data class MonthGroup(val clave: String, val etiqueta: String, val clientes: List<UserEntity>)
 
@@ -56,68 +46,34 @@ private fun agruparPorMes(clientes: List<UserEntity>): List<MonthGroup> {
     return grupos.map { (clave, lista) -> MonthGroup(clave, etiquetaMes(lista.first().createdAt), lista) }
 }
 
+/**
+ * El alta de cuentas y el cambio de rol ya no están aquí: el backend no
+ * expone ningún endpoint para eso (el alta real es el registro público, que
+ * siempre crea rol `cliente`; el rol se fija según `ADMIN_EMAILS` del
+ * servidor). Tampoco existe ya el control de "sesión activa forzar cierre"
+ * (RF-18): era una simulación local sin equivalente en JWT sin estado. Y se
+ * quitó "Comentar a un cliente": no hay endpoint para crear notificaciones
+ * arbitrarias desde el panel admin (el backend solo las genera él mismo como
+ * efecto secundario de aprobar/rechazar/etc), así que ese botón dejaba de
+ * tener ningún efecto real contra el backend.
+ */
 @OptIn(ExperimentalCoroutinesApi::class)
 class UserManagementViewModel(
     private val userRepository: UserRepository,
-    private val activeSessionRegistry: ActiveSessionRegistry,
     private val diagnosticRepository: DiagnosticRepository,
     private val tipoCuestionarioRepository: TipoCuestionarioRepository,
-    private val notificationRepository: NotificationRepository,
     private val toastController: ToastController
 ) : ViewModel() {
 
     val users: StateFlow<List<UserEntity>> = userRepository.observeAll()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    /** RF-18: qué usuarios tienen una sesión activa ahora mismo, para que el admin las supervise. */
-    val activeSessionUserIds: StateFlow<Set<Long>> = activeSessionRegistry.observeActiveUserIds()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
-
     val tipos: StateFlow<List<String>> = tipoCuestionarioRepository.observeTipos()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    private val _form = MutableStateFlow(NewUserForm())
-    val form: StateFlow<NewUserForm> = _form
-
-    private val _showCreateDialog = MutableStateFlow(false)
-    val showCreateDialog: StateFlow<Boolean> = _showCreateDialog
-
-    private val _error = MutableStateFlow<String?>(null)
-    val error: StateFlow<String?> = _error
-
-    fun openCreateDialog() { _form.value = NewUserForm(); _error.value = null; _showCreateDialog.value = true }
-    fun dismissCreateDialog() { _showCreateDialog.value = false }
-
-    fun onNombreChange(value: String) { _form.value = _form.value.copy(nombre = value) }
-    fun onEmailChange(value: String) { _form.value = _form.value.copy(email = value) }
-    fun onPasswordChange(value: String) { _form.value = _form.value.copy(password = value) }
-    fun onRoleChange(value: Role) { _form.value = _form.value.copy(rol = value) }
-
-    fun createUser() {
-        val f = _form.value
-        if (f.nombre.isBlank() || f.email.isBlank() || f.password.length < 6) {
-            _error.value = "Completa nombre, correo y una contraseña de al menos 6 caracteres"
-            return
-        }
-        viewModelScope.launch {
-            val result = userRepository.create(f.nombre, f.email, f.password, f.rol)
-            result.onSuccess { _showCreateDialog.value = false }
-                .onFailure { _error.value = it.message }
-        }
-    }
-
-    fun updateRole(userId: Long, rol: Role) {
-        viewModelScope.launch { userRepository.updateRole(userId, rol) }
-    }
 
     /** Cupo de diagnósticos que puede iniciar un cliente; lo controla únicamente el administrador. `null` = ilimitados. */
     fun setDiagnosticosDisponibles(userId: Long, cantidad: Int?) {
         viewModelScope.launch { userRepository.setDiagnosticosDisponibles(userId, cantidad) }
-    }
-
-    /** RF-18: el admin fuerza el cierre de una sesión activa (p.ej. si quedó colgada). */
-    fun forceCloseSession(userId: Long) {
-        activeSessionRegistry.markInactive(userId)
     }
 
     fun deleteUser(userId: Long) {
@@ -174,34 +130,6 @@ class UserManagementViewModel(
 
     fun openEmpresaDetail(user: UserEntity) { _empresaTarget.value = user }
     fun closeEmpresaDetail() { _empresaTarget.value = null }
-
-    // ---- Comentario a un cliente ----
-
-    private val _comentarioTarget = MutableStateFlow<UserEntity?>(null)
-    val comentarioTarget: StateFlow<UserEntity?> = _comentarioTarget
-
-    val comentarioTargetDiagnosticos: StateFlow<List<DiagnosticEntity>> = _comentarioTarget.flatMapLatest { user ->
-        if (user == null) flowOf(emptyList()) else diagnosticRepository.observeForCliente(user.id)
-            .map { list -> list.filter { it.estado != DiagnosticStatus.BORRADOR } }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    fun openComentarioDialog(user: UserEntity) { _comentarioTarget.value = user }
-    fun closeComentarioDialog() { _comentarioTarget.value = null }
-
-    fun enviarComentario(categoria: String, mensaje: String, diagnosticoId: Long?) {
-        val destinatario = _comentarioTarget.value ?: return
-        if (mensaje.isBlank()) return
-        viewModelScope.launch {
-            notificationRepository.notify(
-                diagnosticId = diagnosticoId,
-                destinatarioId = destinatario.id,
-                tipo = categoria,
-                mensaje = mensaje
-            )
-            _comentarioTarget.value = null
-            toastController.show("Comentario enviado", ToastTipo.EXITO)
-        }
-    }
 
     // ---- Activar / desactivar cuenta ----
 
