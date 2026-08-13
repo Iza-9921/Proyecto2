@@ -678,19 +678,31 @@ class DiagnosticRepositoryImpl(
     override suspend fun updateStatus(id: Long, status: DiagnosticStatus, reviewerId: Long?, comentario: String) {
         val realId = resolveId(id)
         try {
+            val observaciones = buildObservacionesPorPregunta(id, comentario)
             when (status) {
-                DiagnosticStatus.RECHAZADO -> diagnosticoApi.rechazar(realId, RechazarRequest(motivo = comentario))
-                DiagnosticStatus.INFO_REQUERIDA -> diagnosticoApi.solicitarInfo(realId, SolicitarInfoRequest(mensaje = comentario))
-                DiagnosticStatus.VALIDADO -> diagnosticoApi.aprobar(
-                    realId,
-                    AprobarRequest(observaciones = if (comentario.isNotBlank()) mapOf("general" to comentario) else emptyMap())
-                )
+                DiagnosticStatus.RECHAZADO -> diagnosticoApi.rechazar(realId, RechazarRequest(motivo = comentario, observaciones = observaciones))
+                DiagnosticStatus.INFO_REQUERIDA -> diagnosticoApi.solicitarInfo(realId, SolicitarInfoRequest(mensaje = comentario, observaciones = observaciones))
+                DiagnosticStatus.VALIDADO -> diagnosticoApi.aprobar(realId, AprobarRequest(observaciones = observaciones))
                 else -> diagnosticoApi.actualizarEstado(realId, ActualizarEstadoRequest(estado = status.toBackend()))
             }
             refreshDiagnosticDetail(id)
         } catch (e: Exception) {
             reportError(e)
         }
+    }
+
+    /**
+     * Junta el motivo por pregunta que el admin capturó en la revisión detallada
+     * (p. ej. "Motivo por el que no cumple" / "¿Qué información hace falta?") con
+     * el comentario general del formulario de cierre, para que el backend los
+     * guarde en `observaciones_especialista` y el cliente los reciba (antes solo
+     * quedaban en el estado local y nunca llegaban al usuario).
+     */
+    private suspend fun buildObservacionesPorPregunta(diagnosticId: Long, comentarioGeneral: String): Map<String, String> {
+        val porPregunta = questionReviewRepository.observeForDiagnostic(diagnosticId).first()
+            .filter { it.comentario.isNotBlank() }
+            .associate { it.questionCodigo to it.comentario }
+        return if (comentarioGeneral.isNotBlank()) porPregunta + ("general" to comentarioGeneral) else porPregunta
     }
 
     override suspend fun getOfficialScore(diagnosticId: Long): ScorecardResult? {
@@ -711,7 +723,7 @@ class DiagnosticRepositoryImpl(
         try {
             diagnosticoApi.aprobar(
                 resolveId(diagnosticId),
-                AprobarRequest(observaciones = if (comentario.isNotBlank()) mapOf("general" to comentario) else emptyMap())
+                AprobarRequest(observaciones = buildObservacionesPorPregunta(diagnosticId, comentario))
             )
             val reviewerName = userRepository.observeById(reviewerId).first()?.nombre
             _diagnostics.update { map ->

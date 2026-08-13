@@ -57,3 +57,20 @@ data class ApiErrorBody(
     val error: String? = null,
     val details: Any? = null
 )
+
+// ---- Recuperación de contraseña (auth/recuperar, auth/verificar-codigo, auth/nueva-contrasena) ----
+
+data class RecuperarRequest(val email: String)
+
+data class RecuperarResponseDto(val message: String)
+
+data class VerificarCodigoRequest(val email: String, val codigo: String)
+
+data class VerificarCodigoResponseDto(val valido: Boolean, @SerializedName("reset_token") val resetToken: String)
+
+data class NuevaContrasenaRequest(
+    @SerializedName("reset_token") val resetToken: String,
+    @SerializedName("nueva_contrasena") val nuevaContrasena: String
+)
+
+data class NuevaContrasenaResponseDto(val message: String)

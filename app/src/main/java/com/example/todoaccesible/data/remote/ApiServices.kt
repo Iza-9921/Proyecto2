@@ -23,12 +23,16 @@ import com.example.todoaccesible.data.remote.dto.ListarDiagnosticosResponseDto
 import com.example.todoaccesible.data.remote.dto.LoginRequest
 import com.example.todoaccesible.data.remote.dto.MensajeEstadoResponseDto
 import com.example.todoaccesible.data.remote.dto.NotificacionesResponseDto
+import com.example.todoaccesible.data.remote.dto.NuevaContrasenaRequest
+import com.example.todoaccesible.data.remote.dto.NuevaContrasenaResponseDto
 import com.example.todoaccesible.data.remote.dto.OkDto
 import com.example.todoaccesible.data.remote.dto.OrdenRequest
 import com.example.todoaccesible.data.remote.dto.PreguntaDto
 import com.example.todoaccesible.data.remote.dto.PreguntaRequest
 import com.example.todoaccesible.data.remote.dto.ProyectoDto
 import com.example.todoaccesible.data.remote.dto.ProyectoRequest
+import com.example.todoaccesible.data.remote.dto.RecuperarRequest
+import com.example.todoaccesible.data.remote.dto.RecuperarResponseDto
 import com.example.todoaccesible.data.remote.dto.RechazarRequest
 import com.example.todoaccesible.data.remote.dto.RefreshRequest
 import com.example.todoaccesible.data.remote.dto.RegisterRequest
@@ -36,6 +40,8 @@ import com.example.todoaccesible.data.remote.dto.SeccionDto
 import com.example.todoaccesible.data.remote.dto.SeccionRequest
 import com.example.todoaccesible.data.remote.dto.SolicitarInfoRequest
 import com.example.todoaccesible.data.remote.dto.TipoInmuebleRequest
+import com.example.todoaccesible.data.remote.dto.VerificarCodigoRequest
+import com.example.todoaccesible.data.remote.dto.VerificarCodigoResponseDto
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
@@ -58,6 +64,15 @@ interface AuthApiService {
 
     @POST("auth/heartbeat")
     suspend fun heartbeat(): HeartbeatResponseDto
+
+    @POST("auth/recuperar")
+    suspend fun recuperar(@Body request: RecuperarRequest): RecuperarResponseDto
+
+    @POST("auth/verificar-codigo")
+    suspend fun verificarCodigo(@Body request: VerificarCodigoRequest): VerificarCodigoResponseDto
+
+    @POST("auth/nueva-contrasena")
+    suspend fun nuevaContrasena(@Body request: NuevaContrasenaRequest): NuevaContrasenaResponseDto
 }
 
 interface ProyectoApiService {

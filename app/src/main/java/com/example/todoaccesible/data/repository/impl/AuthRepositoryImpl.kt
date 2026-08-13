@@ -8,10 +8,15 @@ import com.example.todoaccesible.data.remote.ApiErrorMapper
 import com.example.todoaccesible.data.remote.AuthApiService
 import com.example.todoaccesible.data.remote.dto.AuthResponseDto
 import com.example.todoaccesible.data.remote.dto.LoginRequest
+import com.example.todoaccesible.data.remote.dto.NuevaContrasenaRequest
+import com.example.todoaccesible.data.remote.dto.RecuperarRequest
 import com.example.todoaccesible.data.remote.dto.RegisterRequest
+import com.example.todoaccesible.data.remote.dto.VerificarCodigoRequest
 import com.example.todoaccesible.data.remote.mapper.toEntity
 import com.example.todoaccesible.data.repository.AuthRepository
 import com.example.todoaccesible.data.repository.AuthResult
+import com.example.todoaccesible.data.repository.PasswordResetResult
+import com.example.todoaccesible.data.repository.VerifyResetCodeResult
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -77,4 +82,35 @@ class AuthRepositoryImpl(
     }
 
     override suspend fun currentUser(): UserEntity? = _cachedUser.value
+
+    override suspend fun requestPasswordReset(email: String): PasswordResetResult {
+        return try {
+            val response = authApiPlain.recuperar(RecuperarRequest(email = email.trim().lowercase()))
+            PasswordResetResult.Success(response.message)
+        } catch (e: Exception) {
+            PasswordResetResult.Error(ApiErrorMapper.from(e).message)
+        }
+    }
+
+    override suspend fun verifyResetCode(email: String, codigo: String): VerifyResetCodeResult {
+        return try {
+            val response = authApiPlain.verificarCodigo(
+                VerificarCodigoRequest(email = email.trim().lowercase(), codigo = codigo.trim())
+            )
+            VerifyResetCodeResult.Success(response.resetToken)
+        } catch (e: Exception) {
+            VerifyResetCodeResult.Error(ApiErrorMapper.from(e).message)
+        }
+    }
+
+    override suspend fun setNewPassword(resetToken: String, nuevaContrasena: String): PasswordResetResult {
+        return try {
+            val response = authApiPlain.nuevaContrasena(
+                NuevaContrasenaRequest(resetToken = resetToken, nuevaContrasena = nuevaContrasena)
+            )
+            PasswordResetResult.Success(response.message)
+        } catch (e: Exception) {
+            PasswordResetResult.Error(ApiErrorMapper.from(e).message)
+        }
+    }
 }

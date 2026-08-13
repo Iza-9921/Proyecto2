@@ -37,7 +37,10 @@ data class RegisterUiState(
     val loading: Boolean = false,
     val error: String? = null,
     /** Cuenta creada, pero el cliente no tiene cupo de diagnósticos asignado por el administrador. */
-    val quotaBlocked: Boolean = false
+    val quotaBlocked: Boolean = false,
+    /** Cuenta creada con éxito: se avisa que un admin debe activarla antes de poder usarla. */
+    val showActivationNotice: Boolean = false,
+    val pendingDiagnosticId: Long? = null
 )
 
 /**
@@ -66,8 +69,10 @@ class RegisterViewModel(
             _uiState.value = state.copy(error = "Completa todos los campos")
             return
         }
-        if (state.password.length < 6) {
-            _uiState.value = state.copy(error = "La contraseña debe tener al menos 6 caracteres")
+        if (!isPasswordSegura(state.password)) {
+            _uiState.value = state.copy(
+                error = "La contraseña debe tener al menos 8 caracteres, mayúscula, minúscula, número y un signo (ej. @, #, %)"
+            )
             return
         }
         if (state.password != state.confirmPassword) {
@@ -76,6 +81,13 @@ class RegisterViewModel(
         }
         _uiState.value = state.copy(step = 2, error = null)
     }
+
+    private fun isPasswordSegura(password: String): Boolean =
+        password.length >= 8 &&
+            password.any { it.isUpperCase() } &&
+            password.any { it.isLowerCase() } &&
+            password.any { it.isDigit() } &&
+            password.any { !it.isLetterOrDigit() }
 
     fun backToStep1() { _uiState.value = _uiState.value.copy(step = 1, error = null) }
 
@@ -98,8 +110,8 @@ class RegisterViewModel(
     fun onRevisionChange(value: String) { _uiState.value = _uiState.value.copy(revision = value) }
     fun onLogoEmpresaChange(value: String?) { _uiState.value = _uiState.value.copy(logoEmpresaUri = value) }
 
-    /** Crea la cuenta, guarda los datos de la empresa en el diagnóstico borrador y navega al cuestionario. */
-    fun register(onSuccess: (diagnosticId: Long) -> Unit) {
+    /** Crea la cuenta y guarda los datos de la empresa en el diagnóstico borrador; el paso al cuestionario espera a que el usuario cierre el aviso de activación. */
+    fun register() {
         val state = _uiState.value
         viewModelScope.launch {
             _uiState.value = state.copy(loading = true, error = null)
@@ -138,8 +150,7 @@ class RegisterViewModel(
                     if (disponibles != null && disponibles <= 0) {
                         _uiState.value = _uiState.value.copy(loading = false, quotaBlocked = true)
                     } else {
-                        _uiState.value = _uiState.value.copy(loading = false)
-                        onSuccess(draft.id)
+                        _uiState.value = _uiState.value.copy(loading = false, showActivationNotice = true, pendingDiagnosticId = draft.id)
                     }
                 }
                 is AuthResult.Error -> {
@@ -150,4 +161,10 @@ class RegisterViewModel(
     }
 
     fun dismissQuotaBlocked() { _uiState.value = _uiState.value.copy(quotaBlocked = false) }
+
+    fun acknowledgeActivationNotice(onSuccess: (diagnosticId: Long) -> Unit) {
+        val diagnosticId = _uiState.value.pendingDiagnosticId ?: return
+        _uiState.value = _uiState.value.copy(showActivationNotice = false, pendingDiagnosticId = null)
+        onSuccess(diagnosticId)
+    }
 }

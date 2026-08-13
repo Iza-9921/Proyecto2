@@ -17,7 +17,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.PictureAsPdf
-import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -93,9 +92,6 @@ fun DiagnosticResultScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { viewModel.exportExcel(context) }, enabled = !uiState.exporting) {
-                        Icon(Icons.Filled.TableChart, contentDescription = "Exportar Excel")
-                    }
                     Button(
                         onClick = { viewModel.exportPdf(context) },
                         enabled = !uiState.exporting,

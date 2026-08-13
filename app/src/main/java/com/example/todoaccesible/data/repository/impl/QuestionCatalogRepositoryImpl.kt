@@ -66,9 +66,13 @@ class QuestionCatalogRepositoryImpl(
 
     private suspend fun refresh(tipo: String) {
         try {
-            val secciones = categoriaApi.listar(tipo)
+            val secciones = categoriaApi.listar(tipo).sortedBy { it.numero }
             _sections.update { it + (tipo to secciones.map { s -> s.toEntity(tipo) }) }
-            _questions.update { it + (tipo to secciones.flatMap { s -> s.questionEntities(tipo) }) }
+            _questions.update {
+                val ordenadas = secciones.flatMap { s -> s.questionEntities(tipo) }
+                    .mapIndexed { index, q -> q.copy(orden = index) }
+                it + (tipo to ordenadas)
+            }
         } catch (e: Exception) {
             loadedTipos.remove(tipo)
             reportError(e)

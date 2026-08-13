@@ -25,6 +25,8 @@ import com.example.todoaccesible.ui.admin.review.AdminReviewScreen
 import com.example.todoaccesible.ui.admin.review.AdminReviewViewModel
 import com.example.todoaccesible.ui.admin.users.UserManagementScreen
 import com.example.todoaccesible.ui.admin.users.UserManagementViewModel
+import com.example.todoaccesible.ui.auth.forgot.ForgotPasswordScreen
+import com.example.todoaccesible.ui.auth.forgot.ForgotPasswordViewModel
 import com.example.todoaccesible.ui.auth.login.LoginScreen
 import com.example.todoaccesible.ui.auth.login.LoginViewModel
 import com.example.todoaccesible.ui.auth.register.RegisterScreen
@@ -92,6 +94,7 @@ fun TodoAccesibleNavGraph(
             LoginScreen(
                 viewModel = viewModel,
                 onNavigateToRegister = { navController.navigate(Routes.Register.route) },
+                onNavigateToForgotPassword = { navController.navigate(Routes.ForgotPassword.route) },
                 onLoginSuccess = { rol ->
                     val destination = if (rol == com.example.todoaccesible.data.model.Role.ADMIN) {
                         Routes.AdminDashboard.route
@@ -100,6 +103,17 @@ fun TodoAccesibleNavGraph(
                     }
                     navController.navigate(destination) { popUpTo(0) }
                 }
+            )
+        }
+
+        composable(Routes.ForgotPassword.route) {
+            val viewModel: ForgotPasswordViewModel = viewModel(
+                factory = viewModelFactory { initializer { ForgotPasswordViewModel(container.authRepository) } }
+            )
+            ForgotPasswordScreen(
+                viewModel = viewModel,
+                onNavigateBack = { navController.popBackStack() },
+                onDone = { navController.navigate(Routes.Login.route) { popUpTo(Routes.Login.route) { inclusive = true } } }
             )
         }
 
@@ -222,7 +236,9 @@ fun TodoAccesibleNavGraph(
                             diagnosticId,
                             container.diagnosticRepository,
                             container.diagnosticHistoryRepository,
-                            container.userRepository
+                            container.userRepository,
+                            container.questionCatalogRepository,
+                            container.questionReviewRepository
                         )
                     }
                 }

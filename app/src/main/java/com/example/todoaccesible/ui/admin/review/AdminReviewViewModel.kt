@@ -21,6 +21,10 @@ import com.example.todoaccesible.data.repository.PresenceRepository
 import com.example.todoaccesible.data.repository.QuestionCatalogRepository
 import com.example.todoaccesible.data.repository.QuestionReviewRepository
 import com.example.todoaccesible.data.repository.UserRepository
+import com.example.todoaccesible.domain.scoring.ScorecardCalculator
+import com.example.todoaccesible.domain.scoring.ScorecardQuestion
+import com.example.todoaccesible.domain.scoring.ScorecardResult
+import com.example.todoaccesible.domain.scoring.toAnswerValue
 import com.example.todoaccesible.export.excel.ExcelDiagnosticGenerator
 import com.example.todoaccesible.export.pdf.PdfScorecardGenerator
 import kotlinx.coroutines.Dispatchers
@@ -56,7 +60,9 @@ data class AdminReviewUiState(
     val creditoFilter: Credito? = null,
     val valorFilter: AnswerValue? = null,
     val comentario: String = "",
-    val history: List<HistoryEntryUi> = emptyList()
+    val history: List<HistoryEntryUi> = emptyList(),
+    /** Cuantificación en vivo con la calificación que el admin lleva capturada hasta ahora (se recalcula con cada cambio). */
+    val liveScorecard: ScorecardResult? = null
 ) {
     val filteredRows: List<ReviewRow> get() = rows.filter { row ->
         (creditoFilter == null || row.question.credito == creditoFilter) &&
@@ -128,7 +134,23 @@ class AdminReviewViewModel(
         }
     }
 
-    val uiState: StateFlow<AdminReviewUiState> = combine(
+    /** Recalcula el scorecard con la misma fórmula del PDF/oficial, pero en vivo con cada cambio de calificación. */
+    private val liveScorecardFlow = combine(rowsFlow, _sections) { rows, sections ->
+        if (rows.isEmpty()) return@combine null
+        val sectionNameById = sections.associate { it.id to it.nombre }
+        val scorecardQuestions = rows.map { row ->
+            ScorecardQuestion(
+                codigo = row.question.codigo,
+                seccionId = row.question.seccionId,
+                seccionNombre = sectionNameById[row.question.seccionId] ?: row.question.seccionId,
+                credito = row.question.credito
+            )
+        }
+        val answers = rows.associate { it.question.codigo to it.reviewStatus.toAnswerValue() }
+        ScorecardCalculator.calculate(scorecardQuestions, answers)
+    }
+
+    private val baseUiState = combine(
         diagnosticRepository.observeById(diagnosticId),
         rowsFlow,
         _filters,
@@ -136,6 +158,10 @@ class AdminReviewViewModel(
         historyFlow
     ) { diagnostic, rows, filters, comentario, history ->
         AdminReviewUiState(diagnostic, rows, filters.query, filters.creditoFilter, filters.valorFilter, comentario, history)
+    }
+
+    val uiState: StateFlow<AdminReviewUiState> = combine(baseUiState, liveScorecardFlow) { state, liveScorecard ->
+        state.copy(liveScorecard = liveScorecard)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AdminReviewUiState())
 
     init {

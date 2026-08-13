@@ -25,15 +25,18 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.example.todoaccesible.R
 import com.example.todoaccesible.core.designsystem.BigTouchButton
+import com.example.todoaccesible.core.theme.LocalThemeController
 import com.example.todoaccesible.data.model.Role
 
 @Composable
 fun LoginScreen(
     viewModel: LoginViewModel,
     onNavigateToRegister: () -> Unit,
+    onNavigateToForgotPassword: () -> Unit,
     onLoginSuccess: (Role) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val isDark = LocalThemeController.current.isDark
 
     Column(
         modifier = Modifier
@@ -44,7 +47,7 @@ fun LoginScreen(
         verticalArrangement = Arrangement.Center
     ) {
         Image(
-            painter = painterResource(R.drawable.logo_todo_accesible),
+            painter = painterResource(if (isDark) R.drawable.logo_todo_accesible_dark else R.drawable.logo_todo_accesible_light),
             contentDescription = "Todo Accesible",
             modifier = Modifier
                 .height(90.dp)
@@ -86,7 +89,11 @@ fun LoginScreen(
             modifier = Modifier.padding(top = 24.dp)
         )
 
-        TextButton(onClick = onNavigateToRegister, modifier = Modifier.padding(top = 8.dp)) {
+        TextButton(onClick = onNavigateToForgotPassword, modifier = Modifier.padding(top = 8.dp)) {
+            Text("¿Olvidaste tu contraseña?")
+        }
+
+        TextButton(onClick = onNavigateToRegister) {
             Text("¿No tienes cuenta? Regístrate")
         }
     }
