@@ -149,24 +149,40 @@ class UserManagementViewModel(
     private val _activarTarget = MutableStateFlow<UserEntity?>(null)
     val activarTarget: StateFlow<UserEntity?> = _activarTarget
 
-    private val _tipoParaAsignar = MutableStateFlow("")
-    val tipoParaAsignar: StateFlow<String> = _tipoParaAsignar
-    fun onTipoParaAsignarChange(value: String) { _tipoParaAsignar.value = value }
+    /** `null` = todavía no lo toca el admin: se usa el default (cuestionario ya asignado, o el primero disponible). */
+    private val _tipoParaAsignarOverride = MutableStateFlow<String?>(null)
+    fun onTipoParaAsignarChange(value: String) { _tipoParaAsignarOverride.value = value }
+
+    /**
+     * Se recalcula como combine (no una sola vez al abrir el diálogo) porque `tipos`
+     * puede seguir cargando en ese momento: si el admin nunca colectó `tipos` antes de
+     * tocar "Activar", la lista todavía está vacía y un valor fijado ahí se queda
+     * pegado en "" para siempre, aunque `tipos` sí termine de llegar poco después.
+     */
+    val tipoParaAsignar: StateFlow<String> = combine(
+        _tipoParaAsignarOverride, _activarTarget, tipos
+    ) { override, user, tiposList ->
+        override ?: user?.cuestionarioAsignado ?: tiposList.firstOrNull().orEmpty()
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
 
     fun openActivarDialog(user: UserEntity) {
+        _tipoParaAsignarOverride.value = null
         _activarTarget.value = user
-        _tipoParaAsignar.value = user.cuestionarioAsignado ?: tipos.value.firstOrNull().orEmpty()
     }
 
-    fun dismissActivarDialog() { _activarTarget.value = null }
+    fun dismissActivarDialog() {
+        _activarTarget.value = null
+        _tipoParaAsignarOverride.value = null
+    }
 
     fun confirmActivar() {
         val user = _activarTarget.value ?: return
-        val tipo = _tipoParaAsignar.value
+        val tipo = tipoParaAsignar.value
         viewModelScope.launch {
             userRepository.assignCuestionario(user.id, tipo)
             userRepository.setLicenseActive(user.id, true)
             _activarTarget.value = null
+            _tipoParaAsignarOverride.value = null
             toastController.show("${user.nombre} activado con cuestionario \"$tipo\"", ToastTipo.EXITO)
         }
     }

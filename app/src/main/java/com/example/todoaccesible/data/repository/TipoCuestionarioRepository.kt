@@ -12,4 +12,7 @@ interface TipoCuestionarioRepository {
 
     /** No permite borrar el último tipo restante. */
     suspend fun deleteTipo(nombre: String)
+
+    /** Cambia el nombre de un tipo existente sin tocar sus secciones/preguntas (ligadas por id, no por nombre). */
+    suspend fun renombrarTipo(nombreActual: String, nombreNuevo: String)
 }

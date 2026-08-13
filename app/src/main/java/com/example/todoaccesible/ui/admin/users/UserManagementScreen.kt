@@ -51,6 +51,10 @@ fun UserManagementScreen(viewModel: UserManagementViewModel) {
     val empresaTargetDiagnostico by viewModel.empresaTargetDiagnostico.collectAsState()
     val toggleTarget by viewModel.toggleTarget.collectAsState()
     val activarTarget by viewModel.activarTarget.collectAsState()
+    // Se colecta aquí (no solo dentro de ActivarDialog) para que la carga de tipos
+    // arranque en cuanto se abre la pantalla, no hasta que el admin ya haya
+    // tocado "Activar" — si no, el diálogo se abre con la lista todavía vacía.
+    val tiposPrecargados by viewModel.tipos.collectAsState()
 
     Scaffold(
         topBar = { TopAppBar(title = { Text("Usuarios") }) }

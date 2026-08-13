@@ -47,6 +47,16 @@ class TipoCuestionarioRepositoryImpl(
         }
     }
 
+    override suspend fun renombrarTipo(nombreActual: String, nombreNuevo: String) {
+        val limpio = nombreNuevo.trim()
+        if (limpio.isEmpty() || limpio == nombreActual) return
+        try {
+            _tipos.value = tipoInmuebleApi.renombrar(nombreActual, TipoInmuebleRequest(limpio))
+        } catch (e: Exception) {
+            reportError(e)
+        }
+    }
+
     override suspend fun deleteTipo(nombre: String) {
         if (_tipos.value.size <= 1) return
         try {

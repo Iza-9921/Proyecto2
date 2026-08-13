@@ -39,8 +39,7 @@ import com.example.todoaccesible.core.designsystem.EmpresaInfoFields
 fun RegisterScreen(
     viewModel: RegisterViewModel,
     onNavigateBack: () -> Unit,
-    onRegisterSuccess: (diagnosticId: Long) -> Unit,
-    onQuotaBlockedAcknowledged: () -> Unit
+    onRegistrationBlocked: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var passwordVisible by remember { mutableStateOf(false) }
@@ -178,27 +177,18 @@ fun RegisterScreen(
         }
     }
 
-    if (uiState.quotaBlocked) {
-        AlertDialog(
-            onDismissRequest = {},
-            title = { Text("Sin diagnósticos disponibles") },
-            text = { Text("No cuentas con diagnósticos disponibles. Comunícate con la empresa para solicitar la asignación de nuevos diagnósticos.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    viewModel.dismissQuotaBlocked()
-                    onQuotaBlockedAcknowledged()
-                }) { Text("Aceptar") }
-            }
-        )
-    }
-
     if (uiState.showActivationNotice) {
         AlertDialog(
             onDismissRequest = {},
-            title = { Text("Cuenta creada") },
-            text = { Text("Tu cuenta se registró correctamente. Un administrador debe activarla antes de que puedas iniciar sesión.") },
+            title = { Text("Cuenta creada con éxito") },
+            text = {
+                Text(
+                    "Tu cuenta se creó correctamente, pero está bloqueada. Debes contactar al administrador para que la habilite. " +
+                        "Una vez que la habilite, inicia sesión con tu correo y contraseña para hacer los diagnósticos que te permita."
+                )
+            },
             confirmButton = {
-                TextButton(onClick = { viewModel.acknowledgeActivationNotice(onRegisterSuccess) }) { Text("Entendido") }
+                TextButton(onClick = { viewModel.acknowledgeActivationNotice(onRegistrationBlocked) }) { Text("Entendido") }
             }
         )
     }

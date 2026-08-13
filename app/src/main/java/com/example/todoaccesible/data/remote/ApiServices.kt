@@ -166,6 +166,9 @@ interface TipoInmuebleApiService {
     @POST("tipos-inmueble")
     suspend fun agregar(@Body request: TipoInmuebleRequest): List<String>
 
+    @PUT("tipos-inmueble/{nombre}")
+    suspend fun renombrar(@Path("nombre") nombre: String, @Body request: TipoInmuebleRequest): List<String>
+
     @DELETE("tipos-inmueble/{nombre}")
     suspend fun eliminar(@Path("nombre") nombre: String): List<String>
 }
