@@ -3,6 +3,7 @@ package com.example.todoaccesible.navigation
 sealed class Routes(val route: String) {
     object Login : Routes("login")
     object Register : Routes("register")
+    object ForgotPassword : Routes("forgot-password")
 
     // Cliente
     object ClienteDashboard : Routes("cliente/dashboard")

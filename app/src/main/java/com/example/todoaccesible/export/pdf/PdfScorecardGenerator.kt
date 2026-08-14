@@ -119,21 +119,24 @@ object PdfScorecardGenerator {
         drawCreditBar(canvas, "Required", scorecard.required, boxRect.left + 16f, boxRect.top + 40f, boxRect.width() - 180f, REQUIRED_COLOR)
         drawCreditBar(canvas, "Plus", scorecard.plus, boxRect.left + 16f, boxRect.top + 70f, boxRect.width() - 180f, PLUS_COLOR)
 
-        // Círculo de nivel alcanzado a la derecha
-        val nivelCenterX = boxRect.right - 70f
-        val nivelCenterY = boxRect.top + 55f
-        val circlePaint = Paint().apply { color = nivelColorInt(scorecard.nivel); isAntiAlias = true }
-        canvas.drawCircle(nivelCenterX, nivelCenterY, 36f, circlePaint)
-        val nivelTextPaint = Paint().apply {
-            color = Color.WHITE
-            textSize = 11f
-            typeface = Typeface.DEFAULT_BOLD
-            textAlign = Paint.Align.CENTER
-            isAntiAlias = true
+        // Círculo de nivel alcanzado a la derecha: no se dibuja para "En proceso"
+        // (no es un nivel distintivo, solo el estado antes de alcanzar Plata).
+        if (scorecard.nivel != Nivel.EN_PROCESO) {
+            val nivelCenterX = boxRect.right - 70f
+            val nivelCenterY = boxRect.top + 55f
+            val circlePaint = Paint().apply { color = nivelColorInt(scorecard.nivel); isAntiAlias = true }
+            canvas.drawCircle(nivelCenterX, nivelCenterY, 36f, circlePaint)
+            val nivelTextPaint = Paint().apply {
+                color = Color.WHITE
+                textSize = 11f
+                typeface = Typeface.DEFAULT_BOLD
+                textAlign = Paint.Align.CENTER
+                isAntiAlias = true
+            }
+            canvas.drawText(scorecard.nivel.label.uppercase(), nivelCenterX, nivelCenterY + 4f, nivelTextPaint)
+            val nivelCaptionPaint = Paint().apply { color = MUTED_COLOR; textSize = 9f; textAlign = Paint.Align.CENTER; isAntiAlias = true }
+            canvas.drawText("Nivel alcanzado", nivelCenterX, boxRect.bottom - 8f, nivelCaptionPaint)
         }
-        canvas.drawText(scorecard.nivel.label.uppercase(), nivelCenterX, nivelCenterY + 4f, nivelTextPaint)
-        val nivelCaptionPaint = Paint().apply { color = MUTED_COLOR; textSize = 9f; textAlign = Paint.Align.CENTER; isAntiAlias = true }
-        canvas.drawText("Nivel alcanzado", nivelCenterX, boxRect.bottom - 8f, nivelCaptionPaint)
     }
 
     /** Devuelve la coordenada Y del borde inferior de la última fila, para poder acomodar el contenido siguiente. */

@@ -9,7 +9,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -18,9 +23,13 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.example.todoaccesible.core.designsystem.BigTouchButton
 import com.example.todoaccesible.core.designsystem.BigTouchOutlinedButton
@@ -30,10 +39,11 @@ import com.example.todoaccesible.core.designsystem.EmpresaInfoFields
 fun RegisterScreen(
     viewModel: RegisterViewModel,
     onNavigateBack: () -> Unit,
-    onRegisterSuccess: (diagnosticId: Long) -> Unit,
-    onQuotaBlockedAcknowledged: () -> Unit
+    onRegistrationBlocked: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    var passwordVisible by remember { mutableStateOf(false) }
+    var confirmPasswordVisible by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.fillMaxSize()) {
         TopAppBar(title = { Text(if (uiState.step == 1) "Crear cuenta · Paso 1 de 2" else "Registro de la empresa · Paso 2 de 2") })
@@ -65,17 +75,38 @@ fun RegisterScreen(
                     onValueChange = viewModel::onPasswordChange,
                     label = { Text("Contraseña") },
                     singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
+                    visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    trailingIcon = {
+                        IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                            Icon(
+                                if (passwordVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                                contentDescription = if (passwordVisible) "Ocultar contraseña" else "Mostrar contraseña"
+                            )
+                        }
+                    },
                     modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    "Usa al menos 8 caracteres, con mayúscula, minúscula, número y un signo (ej. @, #, %).",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 OutlinedTextField(
                     value = uiState.confirmPassword,
                     onValueChange = viewModel::onConfirmPasswordChange,
                     label = { Text("Confirmar contraseña") },
                     singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
+                    visualTransformation = if (confirmPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    trailingIcon = {
+                        IconButton(onClick = { confirmPasswordVisible = !confirmPasswordVisible }) {
+                            Icon(
+                                if (confirmPasswordVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                                contentDescription = if (confirmPasswordVisible) "Ocultar contraseña" else "Mostrar contraseña"
+                            )
+                        }
+                    },
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -138,7 +169,7 @@ fun RegisterScreen(
                     BigTouchButton(
                         text = if (uiState.loading) "Registrando…" else "Registrarse",
                         enabled = !uiState.loading && uiState.projectName.isNotBlank(),
-                        onClick = { viewModel.register(onRegisterSuccess) },
+                        onClick = { viewModel.register() },
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -146,16 +177,18 @@ fun RegisterScreen(
         }
     }
 
-    if (uiState.quotaBlocked) {
+    if (uiState.showActivationNotice) {
         AlertDialog(
             onDismissRequest = {},
-            title = { Text("Sin diagnósticos disponibles") },
-            text = { Text("No cuentas con diagnósticos disponibles. Comunícate con la empresa para solicitar la asignación de nuevos diagnósticos.") },
+            title = { Text("Cuenta creada con éxito") },
+            text = {
+                Text(
+                    "Tu cuenta se creó correctamente, pero está bloqueada. Debes contactar al administrador para que la habilite. " +
+                        "Una vez que la habilite, inicia sesión con tu correo y contraseña para hacer los diagnósticos que te permita."
+                )
+            },
             confirmButton = {
-                TextButton(onClick = {
-                    viewModel.dismissQuotaBlocked()
-                    onQuotaBlockedAcknowledged()
-                }) { Text("Aceptar") }
+                TextButton(onClick = { viewModel.acknowledgeActivationNotice(onRegistrationBlocked) }) { Text("Entendido") }
             }
         )
     }

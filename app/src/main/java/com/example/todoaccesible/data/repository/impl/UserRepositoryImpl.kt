@@ -1,115 +1,137 @@
 package com.example.todoaccesible.data.repository.impl
 
-import com.example.todoaccesible.core.util.PasswordHasher
+import com.example.todoaccesible.core.designsystem.ToastController
+import com.example.todoaccesible.core.designsystem.ToastTipo
 import com.example.todoaccesible.data.local.entities.UserEntity
-import com.example.todoaccesible.data.local.memory.InMemoryTable
 import com.example.todoaccesible.data.model.Role
-import com.example.todoaccesible.data.preferences.DiagnosticQuotaStore
+import com.example.todoaccesible.data.preferences.SessionManager
+import com.example.todoaccesible.data.remote.AdminApiService
+import com.example.todoaccesible.data.remote.ApiErrorMapper
+import com.example.todoaccesible.data.remote.dto.ActivoRequest
+import com.example.todoaccesible.data.remote.dto.CuestionarioAsignadoRequest
+import com.example.todoaccesible.data.remote.mapper.toEntity
 import com.example.todoaccesible.data.repository.UserRepository
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
+import kotlin.math.abs
 
+/**
+ * `GET /admin/usuarios` es admin-only: un cliente no puede llamarlo. Para
+ * que las pantallas de CLIENTE (`ProjectInfoViewModel`, `DashboardViewModel`)
+ * puedan leer su propio `cuestionarioAsignado`/`diagnosticosDisponibles` sin
+ * ese endpoint, [observeById] resuelve el caso "me estoy pidiendo a mí
+ * mismo" con la caché de [AuthRepositoryImpl] (poblada por login/register/
+ * refresh) en vez de llamar al endpoint admin. Para cualquier otro id, sí
+ * llama a `GET /admin/usuarios` (falla en silencio -devuelve null/lista
+ * vacía- si quien pregunta no es admin).
+ */
 class UserRepositoryImpl(
-    private val users: InMemoryTable<UserEntity>,
-    private val quotaStore: DiagnosticQuotaStore
+    private val adminApi: AdminApiService,
+    private val sessionManager: SessionManager,
+    private val selfUserFlow: StateFlow<UserEntity?>,
+    private val toastController: ToastController
 ) : UserRepository {
 
-    companion object {
-        const val DEFAULT_ADMIN_ID = 1L
-        const val DEFAULT_ADMIN_EMAIL = "admin@todoaccesible.mx"
-        const val DEFAULT_ADMIN_PASSWORD = "TodoAccesible2026"
+    private val _adminUsers = MutableStateFlow<List<UserEntity>>(emptyList())
 
-        const val DEMO_CLIENT_ID = 2L
-        const val DEMO_CLIENT_EMAIL = "cliente@todoaccesible.mx"
-        const val DEMO_CLIENT_PASSWORD = "ClienteDemo2026"
-
-        /**
-         * Cuentas por defecto: no hay backend que las provea, así que se siembran al
-         * construir la app. La cuenta cliente demo existe para poder probar el flujo
-         * completo (incluida la descarga del PDF) sin tener que registrar un usuario
-         * ni contestar el cuestionario de 187 preguntas a mano; ver
-         * [DiagnosticRepositoryImpl] para el diagnóstico ya completo que se le siembra.
-         */
-        fun defaultUsers(): List<UserEntity> = listOf(
-            UserEntity(
-                id = DEFAULT_ADMIN_ID,
-                email = DEFAULT_ADMIN_EMAIL,
-                passwordHash = PasswordHasher.hash(DEFAULT_ADMIN_PASSWORD),
-                nombre = "Administrador",
-                rol = Role.ADMIN,
-                licenseActive = true
-            ),
-            UserEntity(
-                id = DEMO_CLIENT_ID,
-                email = DEMO_CLIENT_EMAIL,
-                passwordHash = PasswordHasher.hash(DEMO_CLIENT_PASSWORD),
-                nombre = "Cliente Demo",
-                rol = Role.CLIENTE,
-                licenseActive = true
-                // diagnosticosDisponibles: sembrado por separado en DiagnosticQuotaStore (AppContainer),
-                // que es la fuente real de este dato; ver seedIfAbsent().
-            )
-        )
+    private suspend fun refreshAdminUsers() {
+        try {
+            _adminUsers.value = adminApi.listarUsuarios().map { it.toEntity() }
+        } catch (_: Exception) {
+            // No es admin, o sin conexión: se deja la última lista conocida.
+        }
     }
+
+    override fun observeAll(): Flow<List<UserEntity>> = _adminUsers.onStart { refreshAdminUsers() }
 
     /**
-     * El cupo de diagnósticos ([UserEntity.diagnosticosDisponibles]) vive en
-     * [DiagnosticQuotaStore] (DataStore), no en la tabla en memoria, para que
-     * sobreviva a que se reinicie el proceso; aquí se combina con los demás
-     * campos del usuario antes de exponerlo.
+     * OJO: `combine` se suscribe a TODOS sus flows de entrada sin importar
+     * cuál termine usándose, así que combinar directamente con [observeAll]
+     * disparaba `refreshAdminUsers()` (→ `GET /admin/usuarios`, 403 para un
+     * cliente) incluso cuando el resultado iba a ser el atajo "self" y ese
+     * valor se descartaba. `flatMapLatest` evita suscribirse a [observeAll]
+     * salvo que de verdad se necesite (id distinto al propio).
      */
-    override fun observeAll(): Flow<List<UserEntity>> =
-        combine(users.flow, quotaStore.preferences) { list, prefs ->
-            list.map { it.copy(diagnosticosDisponibles = quotaStore.read(prefs, it.id)) }
-        }
-
+    @OptIn(ExperimentalCoroutinesApi::class)
     override fun observeById(userId: Long): Flow<UserEntity?> =
-        observeAll().map { list -> list.find { it.id == userId } }
+        combine(sessionManager.session, selfUserFlow) { session, self -> session to self }
+            .flatMapLatest { (session, self) ->
+                if (session != null && session.userId == userId && self != null) {
+                    flowOf(self)
+                } else {
+                    observeAll().map { admins -> admins.find { it.id == userId } }
+                }
+            }
 
-    override suspend fun create(nombre: String, email: String, password: String, rol: Role): Result<Long> {
-        val normalizedEmail = email.trim().lowercase()
-        if (users.snapshot.any { it.email == normalizedEmail }) {
-            return Result.failure(IllegalStateException("Ya existe una cuenta con ese correo"))
-        }
-        val id = users.nextId()
-        users.mutate {
-            it + UserEntity(
-                id = id,
-                email = normalizedEmail,
-                passwordHash = PasswordHasher.hash(password),
-                nombre = nombre.trim(),
-                rol = rol
+    /**
+     * No existe endpoint para crear usuarios desde el panel admin: el alta
+     * real es el registro público (que siempre crea rol CLIENTE) más la
+     * activación del admin. `UserManagementScreen` ya no ofrece este botón
+     * (ver Fase 6); esta implementación solo evita dejar el método roto si
+     * algo más lo llegara a invocar.
+     */
+    override suspend fun create(nombre: String, email: String, password: String, rol: Role): Result<Long> =
+        Result.failure(
+            UnsupportedOperationException(
+                "No se pueden crear cuentas desde el panel admin: el cliente debe registrarse y luego activarse desde aquí."
             )
-        }
-        return Result.success(id)
-    }
+        )
 
-    override suspend fun updateRole(userId: Long, rol: Role) {
-        users.mutate { list -> list.map { if (it.id == userId) it.copy(rol = rol) else it } }
-    }
+    /** No hay endpoint para cambiar el rol: se fija en el registro según ADMIN_EMAILS del backend. No-op intencional. */
+    override suspend fun updateRole(userId: Long, rol: Role) = Unit
 
-    override suspend fun updateNombre(userId: Long, nombre: String) {
-        users.mutate { list -> list.map { if (it.id == userId) it.copy(nombre = nombre) else it } }
-    }
+    /** No hay endpoint para renombrar un usuario desde el panel admin. No-op intencional. */
+    override suspend fun updateNombre(userId: Long, nombre: String) = Unit
 
     override suspend fun setLicenseActive(userId: Long, active: Boolean) {
-        users.mutate { list -> list.map { if (it.id == userId) it.copy(licenseActive = active) else it } }
+        runApi { adminApi.setActivo(userId, ActivoRequest(active)) }
     }
 
     override suspend fun delete(userId: Long) {
-        users.mutate { list -> list.filterNot { it.id == userId } }
+        runApi { adminApi.eliminarUsuario(userId) }
     }
 
+    /**
+     * El backend solo expone +1/-1 (`POST`/`DELETE .../limite-cuestionarios`),
+     * no "fijar a N". La UI (`UserManagementScreen`) solo mueve el valor de a
+     * uno por toque, así que en la práctica [delta] casi siempre es ±1; por
+     * robustez se manda como una serie de llamadas +1/-1 desde el último
+     * valor conocido.
+     */
     override suspend fun setDiagnosticosDisponibles(userId: Long, cantidad: Int?) {
-        quotaStore.set(userId, cantidad)
+        if (cantidad == null) return // el backend no tiene concepto de "ilimitado"
+        val current = _adminUsers.value.find { it.id == userId }?.diagnosticosDisponibles ?: 0
+        val delta = cantidad - current
+        if (delta == 0) return
+        runApi {
+            repeat(abs(delta)) {
+                if (delta > 0) adminApi.incrementarLimite(userId) else adminApi.decrementarLimite(userId)
+            }
+        }
     }
 
     override suspend fun decrementDiagnosticoDisponible(userId: Long) {
-        quotaStore.decrement(userId)
+        runApi { adminApi.decrementarLimite(userId) }
     }
 
     override suspend fun assignCuestionario(userId: Long, tipo: String) {
-        users.mutate { list -> list.map { if (it.id == userId) it.copy(cuestionarioAsignado = tipo) else it } }
+        runApi { adminApi.setCuestionarioAsignado(userId, CuestionarioAsignadoRequest(tipo)) }
+    }
+
+    private suspend fun runApi(block: suspend () -> Unit) {
+        try {
+            block()
+            refreshAdminUsers()
+        } catch (e: Exception) {
+            val mapped = ApiErrorMapper.handle(e, sessionManager)
+            toastController.show(mapped.message, ToastTipo.ERROR)
+        }
     }
 }

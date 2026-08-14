@@ -25,6 +25,8 @@ import com.example.todoaccesible.ui.admin.review.AdminReviewScreen
 import com.example.todoaccesible.ui.admin.review.AdminReviewViewModel
 import com.example.todoaccesible.ui.admin.users.UserManagementScreen
 import com.example.todoaccesible.ui.admin.users.UserManagementViewModel
+import com.example.todoaccesible.ui.auth.forgot.ForgotPasswordScreen
+import com.example.todoaccesible.ui.auth.forgot.ForgotPasswordViewModel
 import com.example.todoaccesible.ui.auth.login.LoginScreen
 import com.example.todoaccesible.ui.auth.login.LoginViewModel
 import com.example.todoaccesible.ui.auth.register.RegisterScreen
@@ -75,6 +77,15 @@ fun TodoAccesibleNavGraph(
         }
     }
 
+    // Fase 9: si un 401 real (ya intentado refrescar y falló) cierra la sesión local
+    // -ver ApiErrorMapper.handle/TokenAuthenticator-, aquí se detecta y se fuerza la
+    // navegación a Login, sin importar en qué pantalla estaba el usuario.
+    LaunchedEffect(session) {
+        if (session == null && currentRoute != null && currentRoute != Routes.Login.route && currentRoute != Routes.Register.route) {
+            navController.navigate(Routes.Login.route) { popUpTo(0) }
+        }
+    }
+
     NavHost(navController = navController, startDestination = startDestination, modifier = modifier) {
         composable(Routes.Login.route) {
             val viewModel: LoginViewModel = viewModel(
@@ -83,6 +94,7 @@ fun TodoAccesibleNavGraph(
             LoginScreen(
                 viewModel = viewModel,
                 onNavigateToRegister = { navController.navigate(Routes.Register.route) },
+                onNavigateToForgotPassword = { navController.navigate(Routes.ForgotPassword.route) },
                 onLoginSuccess = { rol ->
                     val destination = if (rol == com.example.todoaccesible.data.model.Role.ADMIN) {
                         Routes.AdminDashboard.route
@@ -94,20 +106,28 @@ fun TodoAccesibleNavGraph(
             )
         }
 
+        composable(Routes.ForgotPassword.route) {
+            val viewModel: ForgotPasswordViewModel = viewModel(
+                factory = viewModelFactory { initializer { ForgotPasswordViewModel(container.authRepository) } }
+            )
+            ForgotPasswordScreen(
+                viewModel = viewModel,
+                onNavigateBack = { navController.popBackStack() },
+                onDone = { navController.navigate(Routes.Login.route) { popUpTo(Routes.Login.route) { inclusive = true } } }
+            )
+        }
+
         composable(Routes.Register.route) {
             val viewModel: RegisterViewModel = viewModel(
                 factory = viewModelFactory {
-                    initializer { RegisterViewModel(container.authRepository, container.diagnosticRepository, container.userRepository) }
+                    initializer { RegisterViewModel(container.authRepository, container.diagnosticRepository) }
                 }
             )
             RegisterScreen(
                 viewModel = viewModel,
                 onNavigateBack = { navController.popBackStack() },
-                onRegisterSuccess = { diagnosticId ->
-                    navController.navigate(Routes.Questionnaire.build(diagnosticId)) { popUpTo(0) }
-                },
-                onQuotaBlockedAcknowledged = {
-                    navController.navigate(Routes.ClienteDashboard.route) { popUpTo(0) }
+                onRegistrationBlocked = {
+                    navController.navigate(Routes.Login.route) { popUpTo(0) }
                 }
             )
         }
@@ -213,7 +233,9 @@ fun TodoAccesibleNavGraph(
                             diagnosticId,
                             container.diagnosticRepository,
                             container.diagnosticHistoryRepository,
-                            container.userRepository
+                            container.userRepository,
+                            container.questionCatalogRepository,
+                            container.questionReviewRepository
                         )
                     }
                 }
@@ -288,10 +310,8 @@ fun TodoAccesibleNavGraph(
                     initializer {
                         UserManagementViewModel(
                             container.userRepository,
-                            container.activeSessionRegistry,
                             container.diagnosticRepository,
                             container.tipoCuestionarioRepository,
-                            container.notificationRepository,
                             container.toastController
                         )
                     }

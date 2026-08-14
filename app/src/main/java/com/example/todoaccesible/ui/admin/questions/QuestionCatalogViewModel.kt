@@ -28,6 +28,9 @@ sealed class QuestionCatalogDialog {
     object CreateTipo : QuestionCatalogDialog()
     object DeleteTipo : QuestionCatalogDialog()
     object RestaurarEjemplo : QuestionCatalogDialog()
+    object RenombrarTipo : QuestionCatalogDialog()
+    object DuplicarTipo : QuestionCatalogDialog()
+    data class ElegirPreguntas(val seccionId: String) : QuestionCatalogDialog()
 }
 
 data class QuestionCatalogUiState(
@@ -116,6 +119,67 @@ class QuestionCatalogViewModel(
         viewModelScope.launch {
             tipoRepository.deleteTipo(tipo)
             _selectedTipo.value = tipos.value.firstOrNull { it != tipo }.orEmpty()
+            closeDialog()
+        }
+    }
+
+    fun confirmRenombrarTipo(nombreNuevo: String) {
+        val limpio = nombreNuevo.trim()
+        if (limpio.isEmpty()) return
+        val actual = _selectedTipo.value
+        viewModelScope.launch {
+            tipoRepository.renombrarTipo(actual, limpio)
+            _selectedTipo.value = limpio
+            closeDialog()
+        }
+    }
+
+    fun confirmDuplicarTipo(nombreNuevo: String) {
+        val limpio = nombreNuevo.trim()
+        if (limpio.isEmpty()) return
+        val tipoOrigen = _selectedTipo.value
+        viewModelScope.launch {
+            tipoRepository.addTipo(limpio)
+            // El backend siembra todo tipo nuevo con las 8 secciones genéricas por
+            // defecto (para que "Crear nuevo cuestionario" no arranque vacío). Como
+            // aquí se va a duplicar la estructura real del tipo de origen, esas
+            // secciones genéricas sobran: se borran antes de copiar, si no quedaban
+            // mezcladas con las del origen.
+            catalogRepository.getAllSections(limpio).forEach { catalogRepository.deleteSeccion(limpio, it.id) }
+            val seccionesOrigen = catalogRepository.getAllSections(tipoOrigen)
+            for (seccion in seccionesOrigen) {
+                val nuevaSeccion = catalogRepository.addSeccion(limpio, seccion.icono, seccion.nombre, seccion.tituloCorto)
+                val preguntas = catalogRepository.getQuestionsForSection(tipoOrigen, seccion.id)
+                for (p in preguntas) {
+                    catalogRepository.addPregunta(
+                        limpio, nuevaSeccion.id, p.concepto, p.credito, p.admiteFoto, p.descripcion, p.imagenEjemplo
+                    )
+                }
+            }
+            _selectedTipo.value = limpio
+            closeDialog()
+        }
+    }
+
+    /** Junta las preguntas de todos los tipos en una sola lista, sin repetir concepto, para el picker "Elegir preguntas". */
+    suspend fun cargarBancoPreguntas(): List<QuestionEntity> {
+        val vistos = HashSet<String>()
+        val resultado = mutableListOf<QuestionEntity>()
+        for (t in tipos.value) {
+            for (p in catalogRepository.getAllQuestions(t)) {
+                if (vistos.add(p.concepto.trim().lowercase())) resultado.add(p)
+            }
+        }
+        return resultado.sortedBy { it.concepto }
+    }
+
+    fun confirmAgregarDesdeBanco(seccionId: String, seleccionadas: List<QuestionEntity>) {
+        if (seleccionadas.isEmpty()) return
+        val tipo = _selectedTipo.value
+        viewModelScope.launch {
+            for (p in seleccionadas) {
+                catalogRepository.addPregunta(tipo, seccionId, p.concepto, p.credito, p.admiteFoto, p.descripcion, p.imagenEjemplo)
+            }
             closeDialog()
         }
     }

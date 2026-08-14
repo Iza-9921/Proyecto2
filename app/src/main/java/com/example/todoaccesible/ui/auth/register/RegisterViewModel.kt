@@ -3,13 +3,13 @@ package com.example.todoaccesible.ui.auth.register
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.todoaccesible.data.local.seed.MexicoLocations
+import com.example.todoaccesible.data.remote.ApiError
+import com.example.todoaccesible.data.remote.ApiErrorMapper
 import com.example.todoaccesible.data.repository.AuthRepository
 import com.example.todoaccesible.data.repository.AuthResult
 import com.example.todoaccesible.data.repository.DiagnosticRepository
-import com.example.todoaccesible.data.repository.UserRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 
 data class RegisterUiState(
@@ -34,19 +34,22 @@ data class RegisterUiState(
     val logoEmpresaUri: String? = null,
     val loading: Boolean = false,
     val error: String? = null,
-    /** Cuenta creada, pero el cliente no tiene cupo de diagnósticos asignado por el administrador. */
-    val quotaBlocked: Boolean = false
+    /** Cuenta creada con éxito, pero bloqueada hasta que un admin la active. Al confirmar, se cierra la sesión recién creada. */
+    val showActivationNotice: Boolean = false
 )
 
 /**
  * El registro público SIEMPRE crea un usuario con rol CLIENTE, en 2 pasos:
  * Paso 1 (cuenta) y Paso 2 (datos de la empresa/inmueble a evaluar). La
- * cuenta y el diagnóstico solo se crean al confirmar el Paso 2.
+ * cuenta y el diagnóstico solo se crean al confirmar el Paso 2. La cuenta
+ * queda inactiva hasta que un admin la habilita (`activo = false` en el
+ * backend para todo registro que no sea de un correo admin), así que no se
+ * deja al usuario entrar a la app con la sesión recién creada: se avisa y se
+ * cierra esa sesión, obligando a iniciar sesión de nuevo una vez activada.
  */
 class RegisterViewModel(
     private val authRepository: AuthRepository,
-    private val diagnosticRepository: DiagnosticRepository,
-    private val userRepository: UserRepository
+    private val diagnosticRepository: DiagnosticRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(RegisterUiState())
@@ -64,8 +67,10 @@ class RegisterViewModel(
             _uiState.value = state.copy(error = "Completa todos los campos")
             return
         }
-        if (state.password.length < 6) {
-            _uiState.value = state.copy(error = "La contraseña debe tener al menos 6 caracteres")
+        if (!isPasswordSegura(state.password)) {
+            _uiState.value = state.copy(
+                error = "La contraseña debe tener al menos 8 caracteres, mayúscula, minúscula, número y un signo (ej. @, #, %)"
+            )
             return
         }
         if (state.password != state.confirmPassword) {
@@ -74,6 +79,13 @@ class RegisterViewModel(
         }
         _uiState.value = state.copy(step = 2, error = null)
     }
+
+    private fun isPasswordSegura(password: String): Boolean =
+        password.length >= 8 &&
+            password.any { it.isUpperCase() } &&
+            password.any { it.isLowerCase() } &&
+            password.any { it.isDigit() } &&
+            password.any { !it.isLetterOrDigit() }
 
     fun backToStep1() { _uiState.value = _uiState.value.copy(step = 1, error = null) }
 
@@ -96,44 +108,57 @@ class RegisterViewModel(
     fun onRevisionChange(value: String) { _uiState.value = _uiState.value.copy(revision = value) }
     fun onLogoEmpresaChange(value: String?) { _uiState.value = _uiState.value.copy(logoEmpresaUri = value) }
 
-    /** Crea la cuenta, guarda los datos de la empresa en el diagnóstico borrador y navega al cuestionario. */
-    fun register(onSuccess: (diagnosticId: Long) -> Unit) {
+    /** Crea la cuenta y guarda los datos de la empresa en el diagnóstico borrador (queda como borrador, resumible tras iniciar sesión ya activa); no navega a ningún lado, solo muestra el aviso de cuenta bloqueada. */
+    fun register() {
         val state = _uiState.value
         viewModelScope.launch {
             _uiState.value = state.copy(loading = true, error = null)
             when (val result = authRepository.register(state.nombre, state.email, state.password)) {
                 is AuthResult.Success -> {
                     val draft = diagnosticRepository.getOrCreateDraft(result.session.userId)
-                    diagnosticRepository.updateProjectInfo(
-                        diagnosticId = draft.id,
-                        projectName = state.projectName,
-                        ubicacion = state.ubicacion,
-                        responsable = state.responsable,
-                        revision = state.revision,
-                        clienteNombre = state.clienteNombre,
-                        telefono = state.telefono,
-                        entidadFederativa = state.entidadFederativa,
-                        ciudad = state.ciudad,
-                        tipoInmueble = state.tipoInmueble,
-                        fechaEvaluacion = state.fechaEvaluacion,
-                        logoEmpresaUri = state.logoEmpresaUri
-                    )
-                    val disponibles = userRepository.observeById(result.session.userId).firstOrNull()?.diagnosticosDisponibles
-                    if (disponibles != null && disponibles <= 0) {
-                        _uiState.value = _uiState.value.copy(loading = false, quotaBlocked = true)
-                    } else {
-                        _uiState.value = _uiState.value.copy(loading = false)
-                        onSuccess(draft.id)
+                    try {
+                        diagnosticRepository.updateProjectInfo(
+                            diagnosticId = draft.id,
+                            projectName = state.projectName,
+                            ubicacion = state.ubicacion,
+                            responsable = state.responsable,
+                            revision = state.revision,
+                            clienteNombre = state.clienteNombre,
+                            telefono = state.telefono,
+                            entidadFederativa = state.entidadFederativa,
+                            ciudad = state.ciudad,
+                            tipoInmueble = state.tipoInmueble,
+                            fechaEvaluacion = state.fechaEvaluacion,
+                            logoEmpresaUri = state.logoEmpresaUri
+                        )
+                    } catch (e: Exception) {
+                        // La cuenta ya se creó (register tuvo éxito); solo falló crear el proyecto/diagnóstico
+                        // en el backend (p.ej. 403 licencia vencida/inactiva). Se deja el mensaje visible y el
+                        // borrador se completa más tarde desde "Nuevo diagnóstico" en el dashboard.
+                        val mapped = ApiErrorMapper.from(e)
+                        val message = if (mapped is ApiError.LicenciaVencida) {
+                            "Tu cuenta se creó, pero tu licencia está vencida o inactiva: contacta al administrador para poder iniciar un diagnóstico."
+                        } else {
+                            mapped.message
+                        }
+                        _uiState.value = _uiState.value.copy(loading = false, error = message)
+                        return@launch
                     }
+                    _uiState.value = _uiState.value.copy(loading = false, showActivationNotice = true)
                 }
                 is AuthResult.Error -> {
                     _uiState.value = _uiState.value.copy(loading = false, error = result.message)
                 }
-                // register() nunca produce conflicto de sesión (RF-18 solo aplica a login).
-                is AuthResult.SessionConflict -> Unit
             }
         }
     }
 
-    fun dismissQuotaBlocked() { _uiState.value = _uiState.value.copy(quotaBlocked = false) }
+    /** El usuario confirmó el aviso: se cierra la sesión (la cuenta sigue bloqueada) y se regresa a Login. */
+    fun acknowledgeActivationNotice(onDone: () -> Unit) {
+        viewModelScope.launch {
+            authRepository.logout()
+            _uiState.value = _uiState.value.copy(showActivationNotice = false)
+            onDone()
+        }
+    }
 }

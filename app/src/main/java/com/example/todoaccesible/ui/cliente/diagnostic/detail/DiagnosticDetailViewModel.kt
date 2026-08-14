@@ -7,8 +7,11 @@ import com.example.todoaccesible.core.designsystem.HistoryEntryUi
 import com.example.todoaccesible.core.util.FileShare
 import com.example.todoaccesible.data.local.entities.DiagnosticEntity
 import com.example.todoaccesible.data.model.DiagnosticStatus
+import com.example.todoaccesible.data.model.QuestionReviewStatus
 import com.example.todoaccesible.data.repository.DiagnosticHistoryRepository
 import com.example.todoaccesible.data.repository.DiagnosticRepository
+import com.example.todoaccesible.data.repository.QuestionCatalogRepository
+import com.example.todoaccesible.data.repository.QuestionReviewRepository
 import com.example.todoaccesible.data.repository.UserRepository
 import com.example.todoaccesible.domain.scoring.ScorecardResult
 import com.example.todoaccesible.export.pdf.PdfScorecardGenerator
@@ -19,20 +22,36 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+/** Motivo que dejó el admin en una pregunta puntual (no cumple / falta información / pendiente). */
+data class QuestionObservation(
+    val questionConcepto: String,
+    val status: QuestionReviewStatus,
+    val comentario: String
+)
+
 data class DiagnosticDetailUiState(
     val loading: Boolean = true,
     val diagnostic: DiagnosticEntity? = null,
     val scorecard: ScorecardResult? = null,
     val history: List<HistoryEntryUi> = emptyList(),
+    val questionObservations: List<QuestionObservation> = emptyList(),
     /** RF-10: no se puede descargar el PDF si faltan preguntas por contestar. */
     val exportError: String? = null
+)
+
+private val OBSERVABLE_STATUSES = setOf(
+    QuestionReviewStatus.NO_CUMPLE,
+    QuestionReviewStatus.SOLICITAR_INFO,
+    QuestionReviewStatus.PENDIENTE
 )
 
 class DiagnosticDetailViewModel(
     private val diagnosticId: Long,
     private val diagnosticRepository: DiagnosticRepository,
     private val diagnosticHistoryRepository: DiagnosticHistoryRepository,
-    private val userRepository: UserRepository
+    private val userRepository: UserRepository,
+    private val questionCatalogRepository: QuestionCatalogRepository,
+    private val questionReviewRepository: QuestionReviewRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(DiagnosticDetailUiState())
@@ -47,6 +66,21 @@ class DiagnosticDetailViewModel(
         viewModelScope.launch {
             val scorecard = diagnosticRepository.recalculateScore(diagnosticId)
             _uiState.value = _uiState.value.copy(scorecard = scorecard, loading = false)
+        }
+        viewModelScope.launch {
+            val diagnostic = diagnosticRepository.getById(diagnosticId) ?: return@launch
+            val tipo = diagnostic.tipoInmueble.ifBlank { "Otro" }
+            val questionsByCode = questionCatalogRepository.getAllQuestions(tipo).associateBy { it.codigo }
+            questionReviewRepository.observeForDiagnostic(diagnosticId).collect { reviews ->
+                val observations = reviews
+                    .filter { it.status in OBSERVABLE_STATUSES && it.comentario.isNotBlank() }
+                    .mapNotNull { review ->
+                        questionsByCode[review.questionCodigo]?.let { question ->
+                            QuestionObservation(question.concepto, review.status, review.comentario)
+                        }
+                    }
+                _uiState.value = _uiState.value.copy(questionObservations = observations)
+            }
         }
         viewModelScope.launch {
             combine(

@@ -59,7 +59,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import coil.compose.AsyncImage
 import com.example.todoaccesible.core.designsystem.AnswerValueChip
 import com.example.todoaccesible.core.designsystem.Chip
+import com.example.todoaccesible.core.designsystem.CreditBar
 import com.example.todoaccesible.core.designsystem.DiagnosticHistorySection
+import com.example.todoaccesible.core.designsystem.NivelChip
 import com.example.todoaccesible.core.designsystem.PhotoItem
 import com.example.todoaccesible.core.theme.EstadoAprobado
 import com.example.todoaccesible.core.theme.EstadoInfoRequerida
@@ -73,11 +75,32 @@ import com.example.todoaccesible.data.model.AnswerValue
 import com.example.todoaccesible.data.model.Credito
 import com.example.todoaccesible.data.model.DiagnosticStatus
 import com.example.todoaccesible.data.model.QuestionReviewStatus
+import com.example.todoaccesible.domain.scoring.ScorecardResult
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
 private data class PhotoViewerState(val photos: List<PhotoItem>, val initialIndex: Int)
+
+/**
+ * Cuantificación en vivo (Required/Plus + nivel) con la calificación que el
+ * admin lleva capturada hasta el momento, se actualiza con cada cambio de
+ * estado por pregunta — mismo cálculo que usa el PDF del administrador.
+ */
+@Composable
+private fun LiveScorecardCard(scorecard: ScorecardResult, modifier: Modifier = Modifier) {
+    Card(modifier = modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("Cuantificación parcial (según la calificación actual)", style = MaterialTheme.typography.titleMedium)
+            CreditBar(label = "Required", score = scorecard.required, color = RequiredNavy)
+            CreditBar(label = "Plus", score = scorecard.plus, color = PlusFuchsia)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Nivel alcanzado:", style = MaterialTheme.typography.titleSmall)
+                NivelChip(scorecard.nivel)
+            }
+        }
+    }
+}
 
 @Composable
 fun AdminReviewScreen(
@@ -175,6 +198,9 @@ fun AdminReviewScreen(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                uiState.liveScorecard?.let { scorecard ->
+                    item { LiveScorecardCard(scorecard) }
+                }
                 if (uiState.history.isNotEmpty()) {
                     item { DiagnosticHistorySection(entries = uiState.history) }
                 }
@@ -372,11 +398,14 @@ private fun QuestionReviewBlock(
 
 /**
  * Bloque nuevo, independiente de las filas de preguntas: cierra el
- * diagnóstico completo. "Validar" recalcula el resultado OFICIAL a partir de
- * la validación por pregunta ya capturada arriba (solo se habilita cuando ya
- * no queda ninguna pendiente/solicitando información). "Rechazar" y
- * "Solicitar información" reutilizan el cambio de estado global que ya
- * existía en el ViewModel.
+ * diagnóstico completo. "Enviar diagnóstico" recalcula el resultado OFICIAL a
+ * partir de la validación por pregunta ya capturada arriba (solo se habilita
+ * cuando ya no queda ninguna pendiente/solicitando información) y notifica al
+ * cliente que su diagnóstico ya fue revisado. "Rechazar" y "Solicitar
+ * información" reutilizan el cambio de estado global que ya existía en el
+ * ViewModel; los tres envían también el motivo capturado por pregunta
+ * (`observaciones`) para que el cliente vea por qué no cumple o qué
+ * información hace falta.
  */
 @Composable
 private fun FinalizeEvaluationBlock(
@@ -421,8 +450,11 @@ private fun FinalizeEvaluationBlock(
                         color = MaterialTheme.colorScheme.error
                     )
                 }
+                OutlinedButton(onClick = onDescargarPdfDefinitivo, modifier = Modifier.fillMaxWidth()) {
+                    Text("Descargar PDF con la calificación actual")
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = onValidar, enabled = canFinalize) { Text("Validar") }
+                    Button(onClick = onValidar, enabled = canFinalize) { Text("Enviar diagnóstico") }
                     OutlinedButton(onClick = onSolicitarInfo) { Text("Solicitar información") }
                     OutlinedButton(onClick = onRechazar) { Text("Rechazar") }
                 }

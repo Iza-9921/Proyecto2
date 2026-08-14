@@ -1,68 +1,116 @@
 package com.example.todoaccesible.data.repository.impl
 
-import com.example.todoaccesible.core.util.PasswordHasher
 import com.example.todoaccesible.data.local.entities.UserEntity
-import com.example.todoaccesible.data.local.memory.InMemoryTable
-import com.example.todoaccesible.data.model.Role
-import com.example.todoaccesible.data.preferences.ActiveSessionRegistry
 import com.example.todoaccesible.data.preferences.SessionManager
 import com.example.todoaccesible.data.preferences.UserSession
+import com.example.todoaccesible.data.remote.ApiError
+import com.example.todoaccesible.data.remote.ApiErrorMapper
+import com.example.todoaccesible.data.remote.AuthApiService
+import com.example.todoaccesible.data.remote.dto.AuthResponseDto
+import com.example.todoaccesible.data.remote.dto.LoginRequest
+import com.example.todoaccesible.data.remote.dto.NuevaContrasenaRequest
+import com.example.todoaccesible.data.remote.dto.RecuperarRequest
+import com.example.todoaccesible.data.remote.dto.RegisterRequest
+import com.example.todoaccesible.data.remote.dto.VerificarCodigoRequest
+import com.example.todoaccesible.data.remote.mapper.toEntity
 import com.example.todoaccesible.data.repository.AuthRepository
 import com.example.todoaccesible.data.repository.AuthResult
-import kotlinx.coroutines.flow.firstOrNull
+import com.example.todoaccesible.data.repository.PasswordResetResult
+import com.example.todoaccesible.data.repository.VerifyResetCodeResult
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 
+/**
+ * Auth real contra el backend. No hay endpoint "me": el único lugar donde el
+ * servidor manda la info completa del usuario es la respuesta de
+ * login/register/refresh, así que se cachea aquí ([cachedUserFlow]) para que
+ * [currentUser] y [UserRepositoryImpl] (para el propio cliente autenticado)
+ * tengan algo de donde leer. [onAuthResponse] también la actualiza
+ * [com.example.todoaccesible.data.remote.TokenAuthenticator] en cada refresh
+ * silencioso (conectado desde `AppContainer`), así que en la práctica se
+ * refresca cada vez que expira el access token corto (15 min).
+ */
 class AuthRepositoryImpl(
-    private val users: InMemoryTable<UserEntity>,
-    private val sessionManager: SessionManager,
-    private val activeSessionRegistry: ActiveSessionRegistry
+    private val authApiPlain: AuthApiService,
+    private val sessionManager: SessionManager
 ) : AuthRepository {
 
     override val session = sessionManager.session
 
-    override suspend fun register(nombre: String, email: String, password: String): AuthResult {
-        val normalizedEmail = email.trim().lowercase()
-        if (users.snapshot.any { it.email == normalizedEmail }) {
-            return AuthResult.Error("Ya existe una cuenta con ese correo")
-        }
-        val id = users.nextId()
-        users.mutate {
-            it + UserEntity(
-                id = id,
-                email = normalizedEmail,
-                passwordHash = PasswordHasher.hash(password),
-                nombre = nombre.trim(),
-                rol = Role.CLIENTE
-            )
-        }
-        sessionManager.startSession(id, Role.CLIENTE)
-        activeSessionRegistry.markActive(id)
-        return AuthResult.Success(UserSession(id, Role.CLIENTE))
+    private val _cachedUser = MutableStateFlow<UserEntity?>(null)
+    val cachedUserFlow: StateFlow<UserEntity?> = _cachedUser
+
+    fun onAuthResponse(response: AuthResponseDto) {
+        _cachedUser.value = response.user.toEntity()
     }
 
-    override suspend fun login(email: String, password: String, force: Boolean): AuthResult {
-        val user = users.snapshot.find { it.email == email.trim().lowercase() }
-            ?: return AuthResult.Error("Correo o contraseña incorrectos")
-        if (!PasswordHasher.matches(password, user.passwordHash)) {
-            return AuthResult.Error("Correo o contraseña incorrectos")
+    override suspend fun register(nombre: String, email: String, password: String): AuthResult {
+        return try {
+            val response = authApiPlain.register(
+                RegisterRequest(name = nombre.trim(), email = email.trim().lowercase(), password = password)
+            )
+            onAuthResponse(response)
+            val entity = response.user.toEntity()
+            sessionManager.startSession(entity.id, entity.rol, response.token, response.refreshToken)
+            AuthResult.Success(UserSession(entity.id, entity.rol))
+        } catch (e: Exception) {
+            AuthResult.Error(ApiErrorMapper.from(e).message)
         }
-        if (!user.licenseActive) {
-            return AuthResult.Error("Tu licencia está inactiva. Contacta al administrador.")
+    }
+
+    override suspend fun login(email: String, password: String): AuthResult {
+        return try {
+            val response = authApiPlain.login(LoginRequest(email = email.trim().lowercase(), password = password))
+            onAuthResponse(response)
+            val entity = response.user.toEntity()
+            sessionManager.startSession(entity.id, entity.rol, response.token, response.refreshToken)
+            AuthResult.Success(UserSession(entity.id, entity.rol))
+        } catch (e: Exception) {
+            val mapped = ApiErrorMapper.from(e)
+            val message = when (mapped) {
+                // 401 en login: el backend usa el mismo mensaje para email inexistente y password incorrecta.
+                is ApiError.Unauthorized -> "Correo o contraseña incorrectos"
+                else -> mapped.message
+            }
+            AuthResult.Error(message)
         }
-        if (!force && activeSessionRegistry.isActive(user.id)) {
-            return AuthResult.SessionConflict(user.id, user.rol)
-        }
-        sessionManager.startSession(user.id, user.rol)
-        activeSessionRegistry.markActive(user.id)
-        return AuthResult.Success(UserSession(user.id, user.rol))
     }
 
     override suspend fun logout() {
-        session.firstOrNull()?.let { activeSessionRegistry.markInactive(it.userId) }
         sessionManager.endSession()
+        _cachedUser.value = null
     }
 
-    override suspend fun currentUser(): UserEntity? {
-        val active = session.firstOrNull() ?: return null
-        return users.snapshot.find { it.id == active.userId }
+    override suspend fun currentUser(): UserEntity? = _cachedUser.value
+
+    override suspend fun requestPasswordReset(email: String): PasswordResetResult {
+        return try {
+            val response = authApiPlain.recuperar(RecuperarRequest(email = email.trim().lowercase()))
+            PasswordResetResult.Success(response.message)
+        } catch (e: Exception) {
+            PasswordResetResult.Error(ApiErrorMapper.from(e).message)
+        }
+    }
+
+    override suspend fun verifyResetCode(email: String, codigo: String): VerifyResetCodeResult {
+        return try {
+            val response = authApiPlain.verificarCodigo(
+                VerificarCodigoRequest(email = email.trim().lowercase(), codigo = codigo.trim())
+            )
+            VerifyResetCodeResult.Success(response.resetToken)
+        } catch (e: Exception) {
+            VerifyResetCodeResult.Error(ApiErrorMapper.from(e).message)
+        }
+    }
+
+    override suspend fun setNewPassword(resetToken: String, nuevaContrasena: String): PasswordResetResult {
+        return try {
+            val response = authApiPlain.nuevaContrasena(
+                NuevaContrasenaRequest(resetToken = resetToken, nuevaContrasena = nuevaContrasena)
+            )
+            PasswordResetResult.Success(response.message)
+        } catch (e: Exception) {
+            PasswordResetResult.Error(ApiErrorMapper.from(e).message)
+        }
     }
 }

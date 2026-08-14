@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -11,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
@@ -32,6 +34,7 @@ import com.example.todoaccesible.core.designsystem.DiagnosticStatusChip
 import com.example.todoaccesible.core.designsystem.ScorecardHeaderCard
 import com.example.todoaccesible.core.designsystem.SectionScoreRow
 import com.example.todoaccesible.data.model.DiagnosticStatus
+import com.example.todoaccesible.data.model.QuestionReviewStatus
 
 @Composable
 fun DiagnosticDetailScreen(
@@ -119,6 +122,9 @@ fun DiagnosticDetailScreen(
             items(scorecard.sections, key = { it.seccionId }) { section ->
                 SectionScoreRow(section = section)
             }
+            if (uiState.questionObservations.isNotEmpty()) {
+                item { QuestionObservationsSection(uiState.questionObservations) }
+            }
             if (uiState.history.isNotEmpty()) {
                 item { DiagnosticHistorySection(entries = uiState.history) }
             }
@@ -134,5 +140,31 @@ fun DiagnosticDetailScreen(
                 TextButton(onClick = viewModel::dismissExportError) { Text("Entendido") }
             }
         )
+    }
+}
+
+/** Motivos que el admin dejó por pregunta (no cumple / falta información / pendiente). */
+@Composable
+private fun QuestionObservationsSection(observations: List<QuestionObservation>, modifier: Modifier = Modifier) {
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Observaciones del administrador", style = MaterialTheme.typography.titleMedium)
+        observations.forEach { observation ->
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(observation.questionConcepto, style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        when (observation.status) {
+                            QuestionReviewStatus.NO_CUMPLE -> "No cumple"
+                            QuestionReviewStatus.SOLICITAR_INFO -> "Falta información"
+                            QuestionReviewStatus.PENDIENTE -> "Pendiente"
+                            else -> observation.status.label
+                        },
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                    Text(observation.comentario, style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+        }
     }
 }
