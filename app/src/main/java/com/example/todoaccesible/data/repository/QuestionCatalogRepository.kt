@@ -39,4 +39,10 @@ interface QuestionCatalogRepository {
 
     /** Reemplaza el catálogo completo de un tipo por su set de ejemplo (o lo deja vacío si no tiene). */
     suspend fun restaurarEjemplo(tipo: String)
+
+    /** Reordena TODAS las secciones del tipo según `orderedIds`. Optimista: refleja el orden de inmediato y revierte si el backend lo rechaza. */
+    suspend fun reorderSections(tipo: String, orderedIds: List<String>)
+
+    /** Reordena las preguntas de una sección según `orderedIds`. Optimista, igual que [reorderSections]. */
+    suspend fun reorderQuestions(tipo: String, seccionId: String, orderedIds: List<String>)
 }

@@ -20,8 +20,8 @@ android {
         // IP de la PC en la red Wi-Fi local: funciona tanto desde un celular físico
         // en la misma red como desde el emulador (que puede llegar a la LAN del host).
         // Si cambia la IP de la PC (DHCP), hay que actualizar esto.
-        buildConfigField("String", "API_BASE_URL", "\"http://192.168.100.19:3001/api/\"")
-        buildConfigField("String", "SOCKET_BASE_URL", "\"http://192.168.100.19:3001/\"")
+        buildConfigField("String", "API_BASE_URL", "\"http://192.168.0.69:3001/api/\"")
+        buildConfigField("String", "SOCKET_BASE_URL", "\"http://192.168.0.69:3001/\"")
     }
 
     buildTypes {

@@ -8,6 +8,7 @@ import com.example.todoaccesible.data.model.Credito
 import com.example.todoaccesible.data.preferences.SessionManager
 import com.example.todoaccesible.data.remote.ApiErrorMapper
 import com.example.todoaccesible.data.remote.CategoriaApiService
+import com.example.todoaccesible.data.remote.dto.OrdenRequest
 import com.example.todoaccesible.data.remote.dto.PreguntaRequest
 import com.example.todoaccesible.data.remote.dto.SeccionRequest
 import com.example.todoaccesible.data.remote.mapper.questionEntities
@@ -142,6 +143,37 @@ class QuestionCatalogRepositoryImpl(
         val seccionId = question.seccionId.toLongOrNull() ?: return
         val preguntaId = codigo.toLongOrNull() ?: return
         runMutation(tipo) { categoriaApi.eliminarPregunta(seccionId, preguntaId) }
+    }
+
+    /**
+     * Reordena de inmediato en el cache local (feedback instantáneo, igual que el `setSecciones`
+     * optimista de `GestionPreguntas.jsx` en la web) y persiste después; si el backend lo rechaza,
+     * [refresh] descarta el orden optimista y vuelve a la verdad del servidor.
+     */
+    override suspend fun reorderSections(tipo: String, orderedIds: List<String>) {
+        val current = _sections.value[tipo].orEmpty().associateBy { it.id }
+        val reordered = orderedIds.mapIndexedNotNull { index, id -> current[id]?.copy(orden = index + 1) }
+        _sections.update { it + (tipo to reordered) }
+        try {
+            categoriaApi.ordenSecciones(tipo, OrdenRequest(orderedIds.mapNotNull(String::toLongOrNull)))
+        } catch (e: Exception) {
+            reportError(e)
+            refresh(tipo)
+        }
+    }
+
+    override suspend fun reorderQuestions(tipo: String, seccionId: String, orderedIds: List<String>) {
+        val id = seccionId.toLongOrNull() ?: return
+        val current = _questions.value[tipo].orEmpty().associateBy { it.codigo }
+        val otras = _questions.value[tipo].orEmpty().filterNot { it.seccionId == seccionId }
+        val reordenadas = orderedIds.mapIndexedNotNull { index, codigo -> current[codigo]?.copy(orden = index) }
+        _questions.update { it + (tipo to (otras + reordenadas)) }
+        try {
+            categoriaApi.ordenPreguntas(id, OrdenRequest(orderedIds.mapNotNull(String::toLongOrNull)))
+        } catch (e: Exception) {
+            reportError(e)
+            refresh(tipo)
+        }
     }
 
     /**

@@ -333,9 +333,9 @@ class DiagnosticRepositoryImpl(
         if (realId < 0) return
         val answer = _answers.value[diagnosticId]?.find { it.questionCodigo == codigo } ?: return
         if (answer.valor == null) return
-        val input = buildRespuestaInput(answer)
+        val (input, sentUris) = buildRespuestaInput(answer)
         val response = diagnosticoApi.guardarRespuestas(realId, GuardarRespuestasRequest(listOf(input)))
-        applyGuardarRespuestasResult(diagnosticId, response)
+        applyGuardarRespuestasResult(diagnosticId, response, mapOf(answer.id to sentUris))
     }
 
     /** Cancela los debounces pendientes de este diagnóstico y empuja TODAS las respuestas de un jalón (usado antes de enviar/reenviar). */
@@ -345,12 +345,14 @@ class DiagnosticRepositoryImpl(
         syncJobs.keys.filter { it.startsWith("$diagnosticId#") }.forEach { syncJobs.remove(it)?.cancel() }
         val answers = _answers.value[diagnosticId].orEmpty().filter { it.valor != null }
         if (answers.isEmpty()) return
-        val inputs = answers.map { buildRespuestaInput(it) }
+        val built = answers.map { it to buildRespuestaInput(it) }
+        val inputs = built.map { it.second.first }
+        val sentByAnswerId = built.associate { (answer, pair) -> answer.id to pair.second }
         val response = diagnosticoApi.guardarRespuestas(realId, GuardarRespuestasRequest(inputs))
-        applyGuardarRespuestasResult(diagnosticId, response)
+        applyGuardarRespuestasResult(diagnosticId, response, sentByAnswerId)
     }
 
-    private suspend fun buildRespuestaInput(answer: AnswerEntity): RespuestaInputDto {
+    private suspend fun buildRespuestaInput(answer: AnswerEntity): Pair<RespuestaInputDto, Set<String>> {
         val pending = _photos.value[answer.id].orEmpty().filterNot { it.uriPath.startsWith("http") }
         val encoded = pending.mapNotNull { photo ->
             try {
@@ -359,25 +361,41 @@ class DiagnosticRepositoryImpl(
                 null
             }
         }
-        return RespuestaInputDto(
+        val dto = RespuestaInputDto(
             pregunta_id = answer.questionCodigo.toLongOrNull() ?: 0L,
             respuesta = (answer.valor ?: AnswerValue.PENDIENTE).toBackend(),
             observaciones = answer.comentario.ifBlank { null },
             fotos = encoded.ifEmpty { null }
         )
+        return dto to pending.map { it.uriPath }.toSet()
     }
 
-    private fun applyGuardarRespuestasResult(diagnosticId: Long, response: GuardarRespuestasResponseDto) {
+    /**
+     * `sentByAnswerId` son las URIs locales que de verdad viajaron en ESTE request (por
+     * answerId). Antes se descartaba cualquier foto local que no viniera confirmada en
+     * la respuesta del servidor, así que una foto agregada mientras un guardado anterior
+     * seguía en vuelo se borraba sola en cuanto esa respuesta llegaba — sin haber sido
+     * nunca subida. Ahora solo se reemplazan por su URL remota las que sí se mandaron;
+     * el resto de fotos locales pendientes (agregadas después de disparar el request) se
+     * conservan para el siguiente sync.
+     */
+    private fun applyGuardarRespuestasResult(
+        diagnosticId: Long,
+        response: GuardarRespuestasResponseDto,
+        sentByAnswerId: Map<Long, Set<String>> = emptyMap()
+    ) {
         response.respuestas.forEach { r ->
             val codigo = r.pregunta_id.toString()
             val answerId = answerLocalId(diagnosticId, codigo)
+            val sentUris = sentByAnswerId[answerId].orEmpty()
             _photos.update { map ->
                 val current = map[answerId].orEmpty()
                 val remoteOnly = current.filter { it.uriPath.startsWith("http") }
+                val stillPendingLocal = current.filterNot { it.uriPath.startsWith("http") || it.uriPath in sentUris }
                 val existingUrls = remoteOnly.map { it.uriPath }.toSet()
                 val newRemote = r.fotos.filterNot { it in existingUrls }
                     .map { url -> PhotoEntity(id = remotePhotoId(url), answerId = answerId, uriPath = url) }
-                map + (answerId to (remoteOnly + newRemote))
+                map + (answerId to (remoteOnly + newRemote + stillPendingLocal))
             }
         }
     }
@@ -559,6 +577,15 @@ class DiagnosticRepositoryImpl(
         val raw = dto.diagnostico
         diagnosticToProyectoId[aliasId] = raw.proyecto_id
         val meta = localMetaStore.get(aliasId)
+        // El detalle de diagnóstico como cliente (`obtenerParaCliente`) nunca trae el tipo de
+        // inmueble: esa columna vive en `proyectos`, no en `diagnosticos` (igual que en el
+        // frontend web, que hace su propio GET /proyectos/:id aparte). `meta.tipoInmueble` solo
+        // tiene valor si el diagnóstico se creó como borrador en ESTE dispositivo; para uno
+        // creado en otro lado (web, otro celular, datos de prueba) queda vacío y el catálogo de
+        // preguntas caía al tipo "Otro" (el más grande, ~180 preguntas) en vez del real.
+        val tipoInmueble = meta.tipoInmueble.ifBlank {
+            runCatching { proyectoApi.obtener(raw.proyecto_id).tipo_inmueble }.getOrNull().orEmpty()
+        }
 
         val answers = dto.preguntas.map { p ->
             AnswerEntity(
@@ -584,11 +611,11 @@ class DiagnosticRepositoryImpl(
             _photos.update { current -> current + photosByAnswer.mapValues { it.value.toList() } }
         }
 
-        val entity = buildEntityFromRawClient(raw, meta, aliasId)
+        val entity = buildEntityFromRawClient(raw, meta, aliasId, tipoInmueble)
         _diagnostics.update { it + (aliasId to entity) }
     }
 
-    private fun buildEntityFromRawClient(raw: DiagnosticoRawDto, meta: LocalDiagnosticMetadata, aliasId: Long): DiagnosticEntity {
+    private fun buildEntityFromRawClient(raw: DiagnosticoRawDto, meta: LocalDiagnosticMetadata, aliasId: Long, tipoInmueble: String = meta.tipoInmueble): DiagnosticEntity {
         val existing = _diagnostics.value[aliasId]
         return DiagnosticEntity(
             id = aliasId,
@@ -607,7 +634,7 @@ class DiagnosticRepositoryImpl(
             telefono = meta.telefono,
             entidadFederativa = meta.entidadFederativa,
             ciudad = meta.ciudad,
-            tipoInmueble = meta.tipoInmueble,
+            tipoInmueble = tipoInmueble,
             fechaEvaluacion = meta.fechaEvaluacion,
             logoEmpresaUri = meta.logoEmpresaUri,
             fechaValidacion = existing?.fechaValidacion,

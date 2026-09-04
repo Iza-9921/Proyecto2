@@ -21,7 +21,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.update
-import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Deriva su estado de `GET /diagnosticos/:id`. El backend arma esa
@@ -42,11 +41,17 @@ class QuestionReviewRepositoryImpl(
 ) : QuestionReviewRepository {
 
     private val _byDiagnostic = MutableStateFlow<Map<Long, List<QuestionReviewEntity>>>(emptyMap())
-    private val loaded = ConcurrentHashMap.newKeySet<Long>()
 
+    // Antes solo se refrescaba la primera vez que se pedía este diagnosticId (con un
+    // set "loaded"), así que si el cliente ya había abierto el detalle antes de que el
+    // admin pidiera información adicional, esta pantalla seguía sirviendo el snapshot
+    // viejo (sin ninguna pregunta marcada "solicitar_info") y ResponderInfoAdicional
+    // se cerraba solo por creer que no había nada que responder. Ahora se refresca cada
+    // vez que algo empieza a observar este diagnóstico, igual que el diagnóstico mismo
+    // (ver DiagnosticRepositoryImpl.observeById/getById).
     override fun observeForDiagnostic(diagnosticId: Long): Flow<List<QuestionReviewEntity>> =
         _byDiagnostic
-            .onStart { if (loaded.add(diagnosticId)) runCatching { refresh(diagnosticId) } }
+            .onStart { runCatching { refresh(diagnosticId) } }
             .map { it[diagnosticId].orEmpty() }
 
     private suspend fun refresh(diagnosticId: Long) {
