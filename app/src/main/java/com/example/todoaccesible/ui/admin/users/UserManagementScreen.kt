@@ -50,6 +50,7 @@ fun UserManagementScreen(viewModel: UserManagementViewModel) {
     val empresaTarget by viewModel.empresaTarget.collectAsState()
     val empresaTargetDiagnostico by viewModel.empresaTargetDiagnostico.collectAsState()
     val toggleTarget by viewModel.toggleTarget.collectAsState()
+    val deleteTarget by viewModel.deleteTarget.collectAsState()
     val activarTarget by viewModel.activarTarget.collectAsState()
     // Se colecta aquí (no solo dentro de ActivarDialog) para que la carga de tipos
     // arranque en cuanto se abre la pantalla, no hasta que el admin ya haya
@@ -113,7 +114,7 @@ fun UserManagementScreen(viewModel: UserManagementViewModel) {
                                 user = user,
                                 onActivar = { viewModel.openActivarDialog(user) },
                                 onDesactivar = { viewModel.requestDeactivate(user) },
-                                onDelete = { viewModel.deleteUser(user.id) },
+                                onDelete = { viewModel.requestDelete(user) },
                                 onDiagnosticosDisponiblesChange = { viewModel.setDiagnosticosDisponibles(user.id, it) },
                                 onVerDetalles = { viewModel.openEmpresaDetail(user) }
                             )
@@ -144,6 +145,17 @@ fun UserManagementScreen(viewModel: UserManagementViewModel) {
             isDestructive = true,
             onConfirm = viewModel::confirmDeactivate,
             onDismiss = viewModel::dismissDeactivate
+        )
+    }
+
+    deleteTarget?.let { user ->
+        ConfirmDialog(
+            title = "Eliminar usuario",
+            message = "Se eliminará permanentemente la cuenta de ${user.nombre} (${user.email}). Esta acción no se puede deshacer.",
+            confirmLabel = "Eliminar",
+            isDestructive = true,
+            onConfirm = viewModel::confirmDelete,
+            onDismiss = viewModel::dismissDelete
         )
     }
 

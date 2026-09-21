@@ -4,6 +4,7 @@ import com.example.todoaccesible.core.designsystem.ToastController
 import com.example.todoaccesible.core.designsystem.ToastTipo
 import com.example.todoaccesible.data.local.entities.QuestionReviewEntity
 import com.example.todoaccesible.data.model.AnswerValue
+import com.example.todoaccesible.data.model.DiagnosticStatus
 import com.example.todoaccesible.data.model.QuestionReviewStatus
 import com.example.todoaccesible.data.model.Role
 import com.example.todoaccesible.data.preferences.SessionManager
@@ -12,6 +13,7 @@ import com.example.todoaccesible.data.remote.DiagnosticoApiService
 import com.example.todoaccesible.data.remote.dto.EvaluacionesRequest
 import com.example.todoaccesible.data.remote.mapper.toAnswerValueBackend
 import com.example.todoaccesible.data.remote.mapper.toBackend
+import com.example.todoaccesible.data.remote.mapper.toDiagnosticStatus
 import com.example.todoaccesible.data.remote.mapper.toReviewStatus
 import com.example.todoaccesible.data.repository.QuestionReviewRepository
 import com.example.todoaccesible.domain.scoring.toAnswerValue
@@ -21,7 +23,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.update
-import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Deriva su estado de `GET /diagnosticos/:id`. El backend arma esa
@@ -41,30 +42,68 @@ class QuestionReviewRepositoryImpl(
     private val toastController: ToastController
 ) : QuestionReviewRepository {
 
-    private val _byDiagnostic = MutableStateFlow<Map<Long, List<QuestionReviewEntity>>>(emptyMap())
-    private val loaded = ConcurrentHashMap.newKeySet<Long>()
+    /**
+     * `var` (no parámetro de constructor) para romper el ciclo con
+     * `DiagnosticRepositoryImpl`, que a su vez recibe este repositorio en su
+     * propio constructor (ver `AppContainer`). Traduce el alias local
+     * (negativo mientras el diagnóstico es un borrador sin sincronizar, o
+     * reutilizado de una sesión anterior con otro rol en la misma instalación)
+     * al id real del backend antes de cualquier llamada de red; el id sin
+     * resolver solo se usa como clave del caché local en memoria (`_byDiagnostic`).
+     */
+    var resolveDiagnosticId: (Long) -> Long = { it }
 
+    private val _byDiagnostic = MutableStateFlow<Map<Long, List<QuestionReviewEntity>>>(emptyMap())
+
+    // Antes solo se refrescaba la primera vez que se pedía este diagnosticId (con un
+    // set "loaded"), así que si el cliente ya había abierto el detalle antes de que el
+    // admin pidiera información adicional, esta pantalla seguía sirviendo el snapshot
+    // viejo (sin ninguna pregunta marcada "solicitar_info") y ResponderInfoAdicional
+    // se cerraba solo por creer que no había nada que responder. Ahora se refresca cada
+    // vez que algo empieza a observar este diagnóstico, igual que el diagnóstico mismo
+    // (ver DiagnosticRepositoryImpl.observeById/getById).
     override fun observeForDiagnostic(diagnosticId: Long): Flow<List<QuestionReviewEntity>> =
         _byDiagnostic
-            .onStart { if (loaded.add(diagnosticId)) runCatching { refresh(diagnosticId) } }
+            .onStart { runCatching { refresh(diagnosticId) } }
             .map { it[diagnosticId].orEmpty() }
 
     private suspend fun refresh(diagnosticId: Long) {
+        val realId = resolveDiagnosticId(diagnosticId)
+        if (realId < 0) return // borrador que todavía no existe en el backend: nada que traer.
         val esAdmin = sessionManager.session.first()?.rol == Role.ADMIN
-        val (evaluaciones, observaciones) = if (esAdmin) {
-            val dto = diagnosticoApi.obtenerParaAdmin(diagnosticId)
-            dto.evaluaciones.orEmpty() to dto.observacionesEspecialista.orEmpty()
+        val (evaluaciones, observaciones, estadoBackend) = if (esAdmin) {
+            val dto = diagnosticoApi.obtenerParaAdmin(realId)
+            Triple(dto.evaluaciones.orEmpty(), dto.observacionesEspecialista.orEmpty(), dto.status)
         } else {
-            val dto = diagnosticoApi.obtenerParaCliente(diagnosticId)
-            dto.diagnostico.evaluaciones.orEmpty() to dto.diagnostico.observaciones_especialista.orEmpty()
+            val dto = diagnosticoApi.obtenerParaCliente(realId)
+            Triple(dto.diagnostico.evaluaciones.orEmpty(), dto.diagnostico.observaciones_especialista.orEmpty(), dto.diagnostico.estado)
         }
+        // El backend no tiene un valor de `evaluaciones` para "solicitar información": al guardarlo
+        // (ver EnumMappers.toBackend) se guarda como "pendiente" igual que una pregunta nunca revisada,
+        // así que ese estado se pierde en el viaje de ida y vuelta y ResponderInfoAdicionalViewModel
+        // nunca encontraba preguntas marcadas (el botón del cliente navegaba y de inmediato regresaba).
+        // Se reconstruye: una pregunta nunca tocada no aparece en `evaluaciones` en absoluto, así que
+        // un "pendiente" presente ahí mientras el diagnóstico sigue en info_requerida solo puede venir
+        // de haberla marcado "Solicitar información" (las demás validaciones sí distinguen su propio
+        // valor). OJO: no se exige comentario por pregunta -- el admin puede solicitar información con
+        // solo el mensaje general (`observaciones["general"]`), sin anotar cada pregunta una por una;
+        // ese mensaje general se usa como respaldo cuando no hay uno específico para la pregunta.
+        val infoRequerida = estadoBackend.toDiagnosticStatus() == DiagnosticStatus.INFO_REQUERIDA
+        val comentarioGeneral = observaciones["general"].orEmpty()
         val list = evaluaciones.map { (codigo, valorStr) ->
+            val comentario = observaciones[codigo].orEmpty()
+            val valor = valorStr.toAnswerValueBackend() ?: AnswerValue.PENDIENTE
+            val status = if (infoRequerida && valor == AnswerValue.PENDIENTE) {
+                QuestionReviewStatus.SOLICITAR_INFO
+            } else {
+                valor.toReviewStatus()
+            }
             QuestionReviewEntity(
                 id = questionReviewLocalId(diagnosticId, codigo),
                 diagnosticId = diagnosticId,
                 questionCodigo = codigo,
-                status = (valorStr.toAnswerValueBackend() ?: AnswerValue.PENDIENTE).toReviewStatus(),
-                comentario = observaciones[codigo].orEmpty()
+                status = status,
+                comentario = comentario.ifBlank { if (status == QuestionReviewStatus.SOLICITAR_INFO) comentarioGeneral else "" }
             )
         }
         _byDiagnostic.update { it + (diagnosticId to list) }
@@ -103,10 +142,12 @@ class QuestionReviewRepositoryImpl(
 
     private suspend fun sync(diagnosticId: Long) {
         try {
+            val realId = resolveDiagnosticId(diagnosticId)
+            if (realId < 0) return // borrador que todavía no existe en el backend: nada que sincronizar.
             val evaluaciones = _byDiagnostic.value[diagnosticId].orEmpty()
                 .associate { it.questionCodigo to it.status.toAnswerValue().toBackend() }
             if (evaluaciones.isEmpty()) return
-            diagnosticoApi.guardarEvaluaciones(diagnosticId, EvaluacionesRequest(evaluaciones))
+            diagnosticoApi.guardarEvaluaciones(realId, EvaluacionesRequest(evaluaciones))
         } catch (e: Exception) {
             val mapped = ApiErrorMapper.handle(e, sessionManager)
             toastController.show(mapped.message, ToastTipo.ERROR)

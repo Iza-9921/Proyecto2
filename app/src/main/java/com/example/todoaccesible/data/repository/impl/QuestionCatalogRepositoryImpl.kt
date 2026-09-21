@@ -8,6 +8,7 @@ import com.example.todoaccesible.data.model.Credito
 import com.example.todoaccesible.data.preferences.SessionManager
 import com.example.todoaccesible.data.remote.ApiErrorMapper
 import com.example.todoaccesible.data.remote.CategoriaApiService
+import com.example.todoaccesible.data.remote.dto.OrdenRequest
 import com.example.todoaccesible.data.remote.dto.PreguntaRequest
 import com.example.todoaccesible.data.remote.dto.SeccionRequest
 import com.example.todoaccesible.data.remote.mapper.questionEntities
@@ -20,6 +21,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -39,6 +42,15 @@ class QuestionCatalogRepositoryImpl(
     private val _sections = MutableStateFlow<Map<String, List<SectionEntity>>>(emptyMap())
     private val _questions = MutableStateFlow<Map<String, List<QuestionEntity>>>(emptyMap())
     private val loadedTipos = ConcurrentHashMap.newKeySet<String>()
+
+    /**
+     * Un `Mutex` por tipo: antes `loadedTipos.add(tipo)` (un `ConcurrentHashMap` set) solo servía
+     * para decidir quién dispara el `refresh()`, pero el resto de corrutinas que perdían esa
+     * carrera (p. ej. `recalculateScore` y `countUnanswered` pidiendo el mismo tipo casi a la vez)
+     * seguían de largo sin esperar a que ese refresh terminara, y `getAllSections`/`getAllQuestions`
+     * (funciones suspend normales, no Flow) podían leer el mapa todavía vacío justo después.
+     */
+    private val loadMutexes = ConcurrentHashMap<String, Mutex>()
 
     override fun observeSections(tipo: String): Flow<List<SectionEntity>> =
         _sections.onStart { ensureLoaded(tipo) }.map { map -> map[tipo].orEmpty().sortedBy { it.orden } }
@@ -60,8 +72,12 @@ class QuestionCatalogRepositoryImpl(
         getAllQuestions(tipo).filter { it.seccionId == sectionId }
 
     private suspend fun ensureLoaded(tipo: String) {
-        if (tipo.isBlank() || !loadedTipos.add(tipo)) return
-        refresh(tipo)
+        if (tipo.isBlank() || tipo in loadedTipos) return
+        loadMutexes.getOrPut(tipo) { Mutex() }.withLock {
+            // Otra corrutina puede haber terminado de cargar mientras esperábamos el lock.
+            if (tipo in loadedTipos) return
+            refresh(tipo)
+        }
     }
 
     private suspend fun refresh(tipo: String) {
@@ -73,8 +89,10 @@ class QuestionCatalogRepositoryImpl(
                     .mapIndexed { index, q -> q.copy(orden = index) }
                 it + (tipo to ordenadas)
             }
+            // Solo se marca "cargado" tras un refresh exitoso: si falla, debe reintentar la
+            // próxima vez que se pida este tipo en vez de quedarse con el catálogo vacío para siempre.
+            loadedTipos.add(tipo)
         } catch (e: Exception) {
-            loadedTipos.remove(tipo)
             reportError(e)
         }
     }
@@ -142,6 +160,37 @@ class QuestionCatalogRepositoryImpl(
         val seccionId = question.seccionId.toLongOrNull() ?: return
         val preguntaId = codigo.toLongOrNull() ?: return
         runMutation(tipo) { categoriaApi.eliminarPregunta(seccionId, preguntaId) }
+    }
+
+    /**
+     * Reordena de inmediato en el cache local (feedback instantáneo, igual que el `setSecciones`
+     * optimista de `GestionPreguntas.jsx` en la web) y persiste después; si el backend lo rechaza,
+     * [refresh] descarta el orden optimista y vuelve a la verdad del servidor.
+     */
+    override suspend fun reorderSections(tipo: String, orderedIds: List<String>) {
+        val current = _sections.value[tipo].orEmpty().associateBy { it.id }
+        val reordered = orderedIds.mapIndexedNotNull { index, id -> current[id]?.copy(orden = index + 1) }
+        _sections.update { it + (tipo to reordered) }
+        try {
+            categoriaApi.ordenSecciones(tipo, OrdenRequest(orderedIds.mapNotNull(String::toLongOrNull)))
+        } catch (e: Exception) {
+            reportError(e)
+            refresh(tipo)
+        }
+    }
+
+    override suspend fun reorderQuestions(tipo: String, seccionId: String, orderedIds: List<String>) {
+        val id = seccionId.toLongOrNull() ?: return
+        val current = _questions.value[tipo].orEmpty().associateBy { it.codigo }
+        val otras = _questions.value[tipo].orEmpty().filterNot { it.seccionId == seccionId }
+        val reordenadas = orderedIds.mapIndexedNotNull { index, codigo -> current[codigo]?.copy(orden = index) }
+        _questions.update { it + (tipo to (otras + reordenadas)) }
+        try {
+            categoriaApi.ordenPreguntas(id, OrdenRequest(orderedIds.mapNotNull(String::toLongOrNull)))
+        } catch (e: Exception) {
+            reportError(e)
+            refresh(tipo)
+        }
     }
 
     /**

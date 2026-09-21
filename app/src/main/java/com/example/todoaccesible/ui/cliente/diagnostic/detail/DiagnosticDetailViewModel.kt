@@ -36,7 +36,8 @@ data class DiagnosticDetailUiState(
     val history: List<HistoryEntryUi> = emptyList(),
     val questionObservations: List<QuestionObservation> = emptyList(),
     /** RF-10: no se puede descargar el PDF si faltan preguntas por contestar. */
-    val exportError: String? = null
+    val exportError: String? = null,
+    val exporting: Boolean = false
 )
 
 private val OBSERVABLE_STATUSES = setOf(
@@ -71,7 +72,7 @@ class DiagnosticDetailViewModel(
             val diagnostic = diagnosticRepository.getById(diagnosticId) ?: return@launch
             val tipo = diagnostic.tipoInmueble.ifBlank { "Otro" }
             val questionsByCode = questionCatalogRepository.getAllQuestions(tipo).associateBy { it.codigo }
-            questionReviewRepository.observeForDiagnostic(diagnosticId).collect { reviews ->
+            questionReviewRepository.observeForDiagnostic(diagnosticRepository.resolveId(diagnosticId)).collect { reviews ->
                 val observations = reviews
                     .filter { it.status in OBSERVABLE_STATUSES && it.comentario.isNotBlank() }
                     .mapNotNull { review ->
@@ -96,27 +97,35 @@ class DiagnosticDetailViewModel(
     }
 
     fun exportPdf(context: Context) {
+        if (_uiState.value.exporting) return
         val diagnostic = _uiState.value.diagnostic ?: return
         val scorecard = _uiState.value.scorecard ?: return
         viewModelScope.launch {
-            val unanswered = diagnosticRepository.countUnanswered(diagnosticId)
-            if (unanswered > 0) {
-                _uiState.value = _uiState.value.copy(
-                    exportError = "Debes contestar todas las preguntas del cuestionario antes de descargar el PDF. Faltan $unanswered."
-                )
-                return@launch
+            _uiState.value = _uiState.value.copy(exporting = true)
+            try {
+                val unanswered = diagnosticRepository.countUnanswered(diagnosticId)
+                if (unanswered > 0) {
+                    _uiState.value = _uiState.value.copy(
+                        exportError = "Debes contestar todas las preguntas del cuestionario antes de descargar el PDF. Faltan $unanswered."
+                    )
+                    return@launch
+                }
+                // Ya validado por el admin: el PDF definitivo usa el resultado oficial, no el preliminar del cliente.
+                val esDefinitivo = diagnostic.estado == DiagnosticStatus.VALIDADO
+                val scorecardParaPdf = if (esDefinitivo) {
+                    diagnosticRepository.getOfficialScore(diagnosticId) ?: scorecard
+                } else {
+                    scorecard
+                }
+                val file = withContext(Dispatchers.IO) {
+                    PdfScorecardGenerator.generate(context, diagnostic, scorecardParaPdf, esDefinitivo)
+                }
+                FileShare.share(context, file, "application/pdf")
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(exportError = "No se pudo generar o compartir el PDF. Intenta de nuevo.")
+            } finally {
+                _uiState.value = _uiState.value.copy(exporting = false)
             }
-            // Ya validado por el admin: el PDF definitivo usa el resultado oficial, no el preliminar del cliente.
-            val esDefinitivo = diagnostic.estado == DiagnosticStatus.VALIDADO
-            val scorecardParaPdf = if (esDefinitivo) {
-                diagnosticRepository.getOfficialScore(diagnosticId) ?: scorecard
-            } else {
-                scorecard
-            }
-            val file = withContext(Dispatchers.IO) {
-                PdfScorecardGenerator.generate(context, diagnostic, scorecardParaPdf, esDefinitivo)
-            }
-            FileShare.share(context, file, "application/pdf")
         }
     }
 

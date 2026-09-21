@@ -76,8 +76,19 @@ class UserManagementViewModel(
         viewModelScope.launch { userRepository.setDiagnosticosDisponibles(userId, cantidad) }
     }
 
-    fun deleteUser(userId: Long) {
-        viewModelScope.launch { userRepository.delete(userId) }
+    private val _deleteTarget = MutableStateFlow<UserEntity?>(null)
+    val deleteTarget: StateFlow<UserEntity?> = _deleteTarget
+    fun requestDelete(user: UserEntity) { _deleteTarget.value = user }
+    fun dismissDelete() { _deleteTarget.value = null }
+
+    /** Antes el ícono de basura borraba de inmediato con un solo tap, sin confirmar (a diferencia
+     * de cualquier otra acción destructiva de esta pantalla, incluida "Desactivar cuenta"). */
+    fun confirmDelete() {
+        val user = _deleteTarget.value ?: return
+        viewModelScope.launch {
+            userRepository.delete(user.id)
+            _deleteTarget.value = null
+        }
     }
 
     // ---- Búsqueda + agrupación por mes ----
@@ -179,8 +190,12 @@ class UserManagementViewModel(
         val user = _activarTarget.value ?: return
         val tipo = tipoParaAsignar.value
         viewModelScope.launch {
-            userRepository.assignCuestionario(user.id, tipo)
-            userRepository.setLicenseActive(user.id, true)
+            // Antes se activaba la licencia sin importar si falló asignar el cuestionario (y sin
+            // importar si la propia activación falló), mostrando igual el toast de "activado" —
+            // un falso positivo. `runApi` ya avisa el error por su cuenta; aquí solo se sigue al
+            // siguiente paso, y se cierra el diálogo con éxito, si el anterior de verdad funcionó.
+            if (!userRepository.assignCuestionario(user.id, tipo)) return@launch
+            if (!userRepository.setLicenseActive(user.id, true)) return@launch
             _activarTarget.value = null
             _tipoParaAsignarOverride.value = null
             toastController.show("${user.nombre} activado con cuestionario \"$tipo\"", ToastTipo.EXITO)

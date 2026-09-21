@@ -29,8 +29,8 @@ import com.example.todoaccesible.data.repository.impl.TipoCuestionarioRepository
 import com.example.todoaccesible.data.repository.impl.UserRepositoryImpl
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 
@@ -78,8 +78,9 @@ class AppContainer(context: Context) {
     val diagnosticHistoryRepository: DiagnosticHistoryRepository =
         DiagnosticHistoryRepositoryImpl(networkModule.diagnosticoApi, sessionManager)
 
-    val questionReviewRepository: QuestionReviewRepository =
+    private val questionReviewRepositoryImpl =
         QuestionReviewRepositoryImpl(networkModule.diagnosticoApi, sessionManager, toastController)
+    val questionReviewRepository: QuestionReviewRepository = questionReviewRepositoryImpl
 
     private val diagnosticRepositoryImpl = DiagnosticRepositoryImpl(
         proyectoApi = networkModule.proyectoApi,
@@ -103,18 +104,36 @@ class AppContainer(context: Context) {
 
     init {
         networkModule.onAuthRefreshed = { authRepositoryImpl.onAuthResponse(it) }
+        questionReviewRepositoryImpl.resolveDiagnosticId = diagnosticRepositoryImpl::resolveId
 
         // Arranca/para heartbeat + socket según haya o no sesión activa (incluida la
-        // sesión persistida al reabrir la app), foreground-only.
-        sessionManager.session.distinctUntilChanged()
-            .onEach { session ->
-                if (session != null) {
+        // sesión persistida al reabrir la app), foreground-only. Se combina con `tokens`
+        // (no solo `session`) para que el socket se reconecte con el access token vigente
+        // cada vez que el heartbeat/TokenAuthenticator lo rota: el cliente de socket.io no
+        // reevalúa el token de un socket ya creado, así que sin esto el socket seguía usando
+        // el token original y, tras la primera reconexión pasados ~15 min, el servidor podía
+        // rechazarlo silenciosamente (notificaciones/eventos en vivo dejaban de llegar).
+        combine(sessionManager.session, sessionManager.tokens) { session, tokens ->
+            if (session != null && tokens != null) Pair(session.userId, tokens.accessToken) else null
+        }
+            .distinctUntilChanged()
+            .onEach { active ->
+                if (active != null) {
+                    val (userId, accessToken) = active
                     heartbeatManager.start(appScope)
-                    val token = sessionManager.tokens.first()?.accessToken
-                    if (token != null) socketManager.connect(session.userId, token)
+                    socketManager.connect(userId, accessToken)
                 } else {
                     heartbeatManager.stop()
                     socketManager.disconnect()
+                    // Sin esto, si un admin cierra sesión y otro usuario entra después en el mismo
+                    // proceso, la lista de usuarios (`GET /admin/usuarios`) del admin anterior se
+                    // quedaba cacheada: el refresh para el nuevo usuario falla en silencio (403 si
+                    // no es admin) y conserva "la última conocida" en vez de vaciarse.
+                    userRepository.clearCache()
+                    // Mismo problema con los alias de diagnóstico local->real (ver clearCache en
+                    // DiagnosticRepository): sin esto sobreviven al cambio de cuenta y pueden
+                    // reutilizarse para el diagnóstico de otra persona.
+                    diagnosticRepositoryImpl.clearCache()
                 }
             }
             .launchIn(appScope)

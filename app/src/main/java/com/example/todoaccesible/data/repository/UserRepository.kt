@@ -5,14 +5,23 @@ import com.example.todoaccesible.data.model.Role
 import kotlinx.coroutines.flow.Flow
 
 interface UserRepository {
+    /**
+     * Limpia la caché local de usuarios (poblada por `GET /admin/usuarios`). Se llama al cerrar
+     * sesión: sin esto, si un admin cierra sesión y otro usuario (no-admin) inicia sesión en el
+     * mismo proceso, `observeAll`/`observeById` seguían sirviendo la última lista de usuarios
+     * (nombres, correos, estado de activación) que trajo la sesión admin anterior, porque el
+     * refresh para el nuevo usuario falla en silencio (403) y conserva "la última conocida".
+     */
+    fun clearCache()
+
     fun observeAll(): Flow<List<UserEntity>>
     fun observeById(userId: Long): Flow<UserEntity?>
     suspend fun create(nombre: String, email: String, password: String, rol: Role): Result<Long>
     suspend fun updateRole(userId: Long, rol: Role)
     suspend fun updateNombre(userId: Long, nombre: String)
 
-    /** RF-03: activa/desactiva la licencia de un usuario; con licencia inactiva no puede iniciar sesión. */
-    suspend fun setLicenseActive(userId: Long, active: Boolean)
+    /** RF-03: activa/desactiva la licencia de un usuario; con licencia inactiva no puede iniciar sesión. `true` = éxito. */
+    suspend fun setLicenseActive(userId: Long, active: Boolean): Boolean
 
     suspend fun delete(userId: Long)
 
@@ -22,6 +31,6 @@ interface UserRepository {
     /** Descuenta un diagnóstico disponible tras un envío exitoso; no hace nada si ya es 0 o ilimitado. */
     suspend fun decrementDiagnosticoDisponible(userId: Long)
 
-    /** Asigna el cuestionario (tipo de inmueble) que este cliente debe responder; lo hace el admin al activar la cuenta. */
-    suspend fun assignCuestionario(userId: Long, tipo: String)
+    /** Asigna el cuestionario (tipo de inmueble) que este cliente debe responder; lo hace el admin al activar la cuenta. `true` = éxito. */
+    suspend fun assignCuestionario(userId: Long, tipo: String): Boolean
 }

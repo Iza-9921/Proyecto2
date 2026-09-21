@@ -69,14 +69,6 @@ data class AdminReviewUiState(
             (valorFilter == null || row.answer?.valor == valorFilter) &&
             (query.isBlank() || row.question.concepto.contains(query, ignoreCase = true) || row.question.codigo.contains(query, ignoreCase = true))
     }
-
-    /** Preguntas cuya validación del admin sigue abierta (pendiente o esperando info del cliente). */
-    val pendingReviewCount: Int get() = rows.count {
-        it.reviewStatus == QuestionReviewStatus.PENDIENTE || it.reviewStatus == QuestionReviewStatus.SOLICITAR_INFO
-    }
-
-    /** Solo se puede finalizar (Validar) cuando ya no queda ninguna pregunta sin dictamen del admin. */
-    val canFinalize: Boolean get() = rows.isNotEmpty() && pendingReviewCount == 0
 }
 
 class AdminReviewViewModel(
@@ -101,6 +93,8 @@ class AdminReviewViewModel(
     private val _comentario = MutableStateFlow("")
     private val _exportError = MutableStateFlow<String?>(null)
     val exportError: StateFlow<String?> = _exportError
+    private val _exporting = MutableStateFlow(false)
+    val exporting: StateFlow<Boolean> = _exporting
 
     private val answers: StateFlow<List<AnswerEntity>> = diagnosticRepository.observeAnswers(diagnosticId)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -233,16 +227,26 @@ class AdminReviewViewModel(
     }
 
     fun exportPdf(context: Context) {
+        if (_exporting.value) return
         viewModelScope.launch {
-            val diagnostic = uiState.value.diagnostic ?: return@launch
-            val unanswered = diagnosticRepository.countUnanswered(diagnosticId)
-            if (unanswered > 0) {
-                _exportError.value = "Debes contestar todas las preguntas del cuestionario antes de descargar el PDF. Faltan $unanswered."
-                return@launch
+            _exporting.value = true
+            try {
+                val diagnostic = uiState.value.diagnostic ?: return@launch
+                val unanswered = diagnosticRepository.countUnanswered(diagnosticId)
+                if (unanswered > 0) {
+                    _exportError.value = "Debes contestar todas las preguntas del cuestionario antes de descargar el PDF. Faltan $unanswered."
+                    return@launch
+                }
+                val scorecard = diagnosticRepository.recalculateScore(diagnosticId) ?: return@launch
+                val file = withContext(Dispatchers.IO) { PdfScorecardGenerator.generate(context, diagnostic, scorecard) }
+                FileShare.share(context, file, "application/pdf")
+            } catch (e: Exception) {
+                // Antes esto no tenía try/catch: un fallo de IO (almacenamiento lleno, FileProvider
+                // mal configurado, etc.) tumbaba la app en vez de mostrar el error como en el resto de la pantalla.
+                _exportError.value = "No se pudo generar o compartir el PDF. Intenta de nuevo."
+            } finally {
+                _exporting.value = false
             }
-            val scorecard = diagnosticRepository.recalculateScore(diagnosticId) ?: return@launch
-            val file = withContext(Dispatchers.IO) { PdfScorecardGenerator.generate(context, diagnostic, scorecard) }
-            FileShare.share(context, file, "application/pdf")
         }
     }
 
@@ -255,27 +259,43 @@ class AdminReviewViewModel(
      * `RevisarDiagnostico.jsx`, ambos disponibles desde el inicio de la revisión).
      */
     fun exportPdfDefinitivo(context: Context) {
+        if (_exporting.value) return
         viewModelScope.launch {
-            val diagnostic = uiState.value.diagnostic ?: return@launch
-            val esDefinitivo = diagnostic.estado == DiagnosticStatus.VALIDADO
-            val scorecard = withContext(Dispatchers.Default) { diagnosticRepository.getOfficialScore(diagnosticId) } ?: return@launch
-            val file = withContext(Dispatchers.IO) {
-                PdfScorecardGenerator.generate(context, diagnostic, scorecard, esDefinitivo = esDefinitivo)
+            _exporting.value = true
+            try {
+                val diagnostic = uiState.value.diagnostic ?: return@launch
+                val esDefinitivo = diagnostic.estado == DiagnosticStatus.VALIDADO
+                val scorecard = withContext(Dispatchers.Default) { diagnosticRepository.getOfficialScore(diagnosticId) } ?: return@launch
+                val file = withContext(Dispatchers.IO) {
+                    PdfScorecardGenerator.generate(context, diagnostic, scorecard, esDefinitivo = esDefinitivo)
+                }
+                FileShare.share(context, file, "application/pdf")
+            } catch (e: Exception) {
+                _exportError.value = "No se pudo generar o compartir el PDF. Intenta de nuevo."
+            } finally {
+                _exporting.value = false
             }
-            FileShare.share(context, file, "application/pdf")
         }
     }
 
     fun dismissExportError() { _exportError.value = null }
 
     fun exportExcel(context: Context) {
+        if (_exporting.value) return
         viewModelScope.launch {
-            val diagnostic = uiState.value.diagnostic ?: return@launch
-            val rows = uiState.value.rows
-            val file = withContext(Dispatchers.IO) {
-                ExcelDiagnosticGenerator.generate(context, diagnostic, rows, _sections.value)
+            _exporting.value = true
+            try {
+                val diagnostic = uiState.value.diagnostic ?: return@launch
+                val rows = uiState.value.rows
+                val file = withContext(Dispatchers.IO) {
+                    ExcelDiagnosticGenerator.generate(context, diagnostic, rows, _sections.value)
+                }
+                FileShare.share(context, file, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            } catch (e: Exception) {
+                _exportError.value = "No se pudo generar o compartir el Excel. Intenta de nuevo."
+            } finally {
+                _exporting.value = false
             }
-            FileShare.share(context, file, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         }
     }
 }

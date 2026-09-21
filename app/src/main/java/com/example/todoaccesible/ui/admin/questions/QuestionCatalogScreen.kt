@@ -5,6 +5,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -14,11 +15,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
@@ -82,7 +87,10 @@ fun QuestionCatalogScreen(viewModel: QuestionCatalogViewModel) {
                         Icon(Icons.Filled.Add, contentDescription = "Crear nuevo cuestionario")
                     }
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                Row(
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
                     TextButton(onClick = { viewModel.openDialog(QuestionCatalogDialog.RenombrarTipo) }) {
                         Text("Editar nombre")
                     }
@@ -104,16 +112,45 @@ fun QuestionCatalogScreen(viewModel: QuestionCatalogViewModel) {
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                items(uiState.sections, key = { it.id }) { section ->
+                itemsIndexed(uiState.sections, key = { _, section -> section.id }) { index, section ->
+                    val preguntas = uiState.preguntasDe(section.id)
                     SeccionCard(
                         section = section,
-                        preguntas = uiState.preguntasDe(section.id),
+                        preguntas = preguntas,
                         expanded = section.id in uiState.expandedSections,
+                        canMoveUp = index > 0,
+                        canMoveDown = index < uiState.sections.lastIndex,
+                        onMoveUp = {
+                            val ids = uiState.sections.map { it.id }.toMutableList()
+                            ids.add(index - 1, ids.removeAt(index))
+                            viewModel.reorderSections(ids)
+                        },
+                        onMoveDown = {
+                            val ids = uiState.sections.map { it.id }.toMutableList()
+                            ids.add(index + 1, ids.removeAt(index))
+                            viewModel.reorderSections(ids)
+                        },
                         onToggle = { viewModel.toggleSection(section.id) },
                         onEditSection = { viewModel.openDialog(QuestionCatalogDialog.EditSection(section)) },
                         onDeleteSection = { viewModel.openDialog(QuestionCatalogDialog.DeleteSection(section)) },
                         onEditQuestion = { viewModel.openDialog(QuestionCatalogDialog.EditQuestion(it)) },
                         onDeleteQuestion = { viewModel.openDialog(QuestionCatalogDialog.DeleteQuestion(it)) },
+                        onMoveQuestionUp = { pregunta ->
+                            val idx = preguntas.indexOfFirst { it.codigo == pregunta.codigo }
+                            if (idx > 0) {
+                                val codigos = preguntas.map { it.codigo }.toMutableList()
+                                codigos.add(idx - 1, codigos.removeAt(idx))
+                                viewModel.reorderQuestions(section.id, codigos)
+                            }
+                        },
+                        onMoveQuestionDown = { pregunta ->
+                            val idx = preguntas.indexOfFirst { it.codigo == pregunta.codigo }
+                            if (idx in 0 until preguntas.lastIndex) {
+                                val codigos = preguntas.map { it.codigo }.toMutableList()
+                                codigos.add(idx + 1, codigos.removeAt(idx))
+                                viewModel.reorderQuestions(section.id, codigos)
+                            }
+                        },
                         onAddQuestion = { viewModel.openDialog(QuestionCatalogDialog.AddQuestion(section.id)) },
                         onElegirPreguntas = { viewModel.openDialog(QuestionCatalogDialog.ElegirPreguntas(section.id)) }
                     )
@@ -135,6 +172,7 @@ fun QuestionCatalogScreen(viewModel: QuestionCatalogViewModel) {
         is QuestionCatalogDialog.CreateTipo -> TextInputDialog(
             title = "Crear nuevo cuestionario",
             label = "Nombre del cuestionario",
+            busy = uiState.tipoActionBusy,
             onConfirm = viewModel::confirmCreateTipo,
             onDismiss = viewModel::closeDialog
         )
@@ -142,6 +180,7 @@ fun QuestionCatalogScreen(viewModel: QuestionCatalogViewModel) {
             title = "Editar nombre del cuestionario",
             label = "Nuevo nombre",
             initialValue = uiState.selectedTipo,
+            busy = uiState.tipoActionBusy,
             onConfirm = viewModel::confirmRenombrarTipo,
             onDismiss = viewModel::closeDialog
         )
@@ -149,6 +188,8 @@ fun QuestionCatalogScreen(viewModel: QuestionCatalogViewModel) {
             title = "Duplicar cuestionario",
             label = "Nombre del nuevo cuestionario",
             initialValue = "${uiState.selectedTipo} (copia)",
+            busy = uiState.tipoActionBusy,
+            busyLabel = "Duplicando…",
             onConfirm = viewModel::confirmDuplicarTipo,
             onDismiss = viewModel::closeDialog
         )
@@ -165,6 +206,7 @@ fun QuestionCatalogScreen(viewModel: QuestionCatalogViewModel) {
             message = "Se eliminará \"${uiState.selectedTipo}\" junto con todas sus secciones y preguntas. Esta acción no se puede deshacer.",
             confirmLabel = "Eliminar",
             isDestructive = true,
+            busy = uiState.tipoActionBusy,
             onConfirm = viewModel::confirmDeleteTipo,
             onDismiss = viewModel::closeDialog
         )
@@ -225,11 +267,17 @@ private fun SeccionCard(
     section: SectionEntity,
     preguntas: List<QuestionEntity>,
     expanded: Boolean,
+    canMoveUp: Boolean,
+    canMoveDown: Boolean,
+    onMoveUp: () -> Unit,
+    onMoveDown: () -> Unit,
     onToggle: () -> Unit,
     onEditSection: () -> Unit,
     onDeleteSection: () -> Unit,
     onEditQuestion: (QuestionEntity) -> Unit,
     onDeleteQuestion: (QuestionEntity) -> Unit,
+    onMoveQuestionUp: (QuestionEntity) -> Unit,
+    onMoveQuestionDown: (QuestionEntity) -> Unit,
     onAddQuestion: () -> Unit,
     onElegirPreguntas: () -> Unit
 ) {
@@ -249,13 +297,24 @@ private fun SeccionCard(
                         Text("${preguntas.size} preguntas", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
+                IconButton(onClick = onMoveUp, enabled = canMoveUp) { Icon(Icons.Filled.ArrowUpward, contentDescription = "Subir sección") }
+                IconButton(onClick = onMoveDown, enabled = canMoveDown) { Icon(Icons.Filled.ArrowDownward, contentDescription = "Bajar sección") }
                 IconButton(onClick = onEditSection) { Icon(Icons.Filled.Edit, contentDescription = "Editar sección") }
                 IconButton(onClick = onDeleteSection) { Icon(Icons.Filled.Delete, contentDescription = "Eliminar sección", tint = MaterialTheme.colorScheme.error) }
             }
 
             if (expanded) {
                 preguntas.forEachIndexed { index, pregunta ->
-                    PreguntaRow(pregunta = pregunta, numero = index + 1, onEdit = { onEditQuestion(pregunta) }, onDelete = { onDeleteQuestion(pregunta) })
+                    PreguntaRow(
+                        pregunta = pregunta,
+                        numero = index + 1,
+                        canMoveUp = index > 0,
+                        canMoveDown = index < preguntas.lastIndex,
+                        onMoveUp = { onMoveQuestionUp(pregunta) },
+                        onMoveDown = { onMoveQuestionDown(pregunta) },
+                        onEdit = { onEditQuestion(pregunta) },
+                        onDelete = { onDeleteQuestion(pregunta) }
+                    )
                     HorizontalDivider()
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -273,7 +332,16 @@ private fun SeccionCard(
 }
 
 @Composable
-private fun PreguntaRow(pregunta: QuestionEntity, numero: Int, onEdit: () -> Unit, onDelete: () -> Unit) {
+private fun PreguntaRow(
+    pregunta: QuestionEntity,
+    numero: Int,
+    canMoveUp: Boolean,
+    canMoveDown: Boolean,
+    onMoveUp: () -> Unit,
+    onMoveDown: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit
+) {
     var verInstruccion by remember(pregunta.codigo) { mutableStateOf(false) }
     val tieneInstruccion = pregunta.descripcion.isNotBlank() || pregunta.imagenEjemplo != null
 
@@ -311,6 +379,8 @@ private fun PreguntaRow(pregunta: QuestionEntity, numero: Int, onEdit: () -> Uni
                     }
                 }
             }
+            IconButton(onClick = onMoveUp, enabled = canMoveUp) { Icon(Icons.Filled.ArrowUpward, contentDescription = "Subir pregunta", modifier = Modifier.size(20.dp)) }
+            IconButton(onClick = onMoveDown, enabled = canMoveDown) { Icon(Icons.Filled.ArrowDownward, contentDescription = "Bajar pregunta", modifier = Modifier.size(20.dp)) }
             IconButton(onClick = onEdit) { Icon(Icons.Filled.Edit, contentDescription = "Editar pregunta") }
             IconButton(onClick = onDelete) { Icon(Icons.Filled.Delete, contentDescription = "Eliminar pregunta", tint = MaterialTheme.colorScheme.error) }
         }
@@ -322,16 +392,18 @@ private fun TextInputDialog(
     title: String,
     label: String,
     initialValue: String = "",
+    busy: Boolean = false,
+    busyLabel: String = "Guardando…",
     onConfirm: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
     var value by remember { mutableStateOf(initialValue) }
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!busy) onDismiss() },
         title = { Text(title) },
-        text = { OutlinedTextField(value = value, onValueChange = { value = it }, label = { Text(label) }, singleLine = true) },
-        confirmButton = { BigTouchButton(text = "Guardar", onClick = { onConfirm(value) }) },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
+        text = { OutlinedTextField(value = value, onValueChange = { value = it }, label = { Text(label) }, singleLine = true, enabled = !busy) },
+        confirmButton = { BigTouchButton(text = if (busy) busyLabel else "Guardar", enabled = !busy, onClick = { onConfirm(value) }) },
+        dismissButton = { TextButton(onClick = onDismiss, enabled = !busy) { Text("Cancelar") } }
     )
 }
 
@@ -437,21 +509,21 @@ private fun PreguntaDialog(
 
 @Composable
 private fun BancoPreguntasDialog(
-    cargar: suspend () -> List<QuestionEntity>,
+    cargar: suspend () -> List<BancoPregunta>,
     onConfirm: (List<QuestionEntity>) -> Unit,
     onDismiss: () -> Unit
 ) {
     var cargando by remember { mutableStateOf(true) }
-    var preguntas by remember { mutableStateOf<List<QuestionEntity>>(emptyList()) }
+    var banco by remember { mutableStateOf<List<BancoPregunta>>(emptyList()) }
     var busqueda by remember { mutableStateOf("") }
     var seleccionadas by remember { mutableStateOf<Set<String>>(emptySet()) }
 
     LaunchedEffect(Unit) {
-        preguntas = cargar()
+        banco = cargar()
         cargando = false
     }
 
-    val filtradas = preguntas.filter { it.concepto.contains(busqueda, ignoreCase = true) }
+    val filtradas = banco.filter { it.question.concepto.contains(busqueda, ignoreCase = true) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -468,18 +540,22 @@ private fun BancoPreguntasDialog(
                     cargando -> Text("Cargando preguntas...")
                     filtradas.isEmpty() -> Text("No se encontraron preguntas.")
                     else -> LazyColumn(modifier = Modifier.heightIn(max = 320.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        items(filtradas, key = { "${it.tipo}-${it.codigo}" }) { pregunta ->
-                            val marcada = pregunta.concepto in seleccionadas
+                        items(filtradas, key = { "${it.question.tipo}-${it.question.codigo}" }) { item ->
+                            val marcada = item.question.concepto in seleccionadas
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier.fillMaxWidth().clickable {
-                                    seleccionadas = if (marcada) seleccionadas - pregunta.concepto else seleccionadas + pregunta.concepto
+                                    seleccionadas = if (marcada) seleccionadas - item.question.concepto else seleccionadas + item.question.concepto
                                 }
                             ) {
                                 Checkbox(checked = marcada, onCheckedChange = null)
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text(pregunta.concepto, style = MaterialTheme.typography.bodyMedium)
-                                    Text(pregunta.tipo, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(item.question.concepto, style = MaterialTheme.typography.bodyMedium)
+                                    Text(
+                                        "${item.origenTipo} · ${item.origenSeccion}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                 }
                             }
                         }
@@ -490,7 +566,7 @@ private fun BancoPreguntasDialog(
         confirmButton = {
             BigTouchButton(
                 text = "Agregar seleccionadas (${seleccionadas.size})",
-                onClick = { onConfirm(preguntas.filter { it.concepto in seleccionadas }) }
+                onClick = { onConfirm(banco.filter { it.question.concepto in seleccionadas }.map { it.question }) }
             )
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }

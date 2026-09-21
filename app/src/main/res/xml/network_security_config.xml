@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Solo para desarrollo: 10.0.2.2 es el alias del emulador hacia el host; 192.168.0.69 es la IP
-     de la PC en la red Wi-Fi local, usada por un celular físico en la misma red. -->
+<!-- Solo para desarrollo: 10.0.2.2 es el alias fijo del emulador Android hacia el host, así que
+     se deja tal cual. Para un celular físico hay que agregar aquí la IP de LAN de la PC que
+     corra el backend (la misma que se pone en API_BASE_URL/SOCKET_BASE_URL de build.gradle.kts). -->
 <network-security-config>
     <domain-config cleartextTrafficPermitted="true">
         <domain includeSubdomains="false">10.0.2.2</domain>
-        <domain includeSubdomains="false">192.168.0.69</domain>
     </domain-config>
 </network-security-config>

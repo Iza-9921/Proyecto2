@@ -1,6 +1,7 @@
 package com.example.todoaccesible.data.remote
 
 import com.example.todoaccesible.data.preferences.SessionManager
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -33,6 +34,8 @@ class HeartbeatManager(
                     val tokens = sessionManager.tokens.first() ?: continue
                     val response = authApi.heartbeat()
                     sessionManager.updateTokens(response.token, tokens.refreshToken)
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (_: Exception) {
                     // Sin conexión o token ya inválido: se reintenta en el siguiente ciclo.
                 }

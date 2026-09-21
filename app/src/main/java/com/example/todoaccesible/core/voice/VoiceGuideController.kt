@@ -73,4 +73,13 @@ class VoiceGuideController(context: Context) {
     fun toggle() {
         if (_speaking.value) stop() else speak()
     }
+
+    /** Libera el motor TTS nativo. Hoy [VoiceGuideController] vive todo el proceso (ver `AppContainer`),
+     * pero sin este método no había forma de liberarlo si su ciclo de vida cambiara más adelante. */
+    fun shutdown() {
+        tts?.stop()
+        tts?.shutdown()
+        tts = null
+        _speaking.value = false
+    }
 }

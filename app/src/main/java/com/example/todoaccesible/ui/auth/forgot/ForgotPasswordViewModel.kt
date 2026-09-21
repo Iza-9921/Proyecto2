@@ -2,6 +2,7 @@ package com.example.todoaccesible.ui.auth.forgot
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.todoaccesible.core.util.isValidEmail
 import com.example.todoaccesible.data.repository.AuthRepository
 import com.example.todoaccesible.data.repository.PasswordResetResult
 import com.example.todoaccesible.data.repository.VerifyResetCodeResult
@@ -52,6 +53,10 @@ class ForgotPasswordViewModel(
             _uiState.value = _uiState.value.copy(error = "Ingresa tu correo electrónico")
             return
         }
+        if (!isValidEmail(email)) {
+            _uiState.value = _uiState.value.copy(error = "Ingresa un correo electrónico válido")
+            return
+        }
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(loading = true, error = null)
             when (val result = authRepository.requestPasswordReset(email)) {
@@ -94,7 +99,11 @@ class ForgotPasswordViewModel(
         }
     }
 
-    fun reenviarCodigo() = solicitarCodigo()
+    /** Antes dejaba el código de 6 dígitos anterior (ya inválido) escrito en el campo tras reenviar. */
+    fun reenviarCodigo() {
+        _uiState.value = _uiState.value.copy(codigo = "")
+        solicitarCodigo()
+    }
 
     fun volverAPedirCodigo() {
         _uiState.value = _uiState.value.copy(step = ForgotPasswordStep.EMAIL, codigo = "", error = null, infoMessage = null)
@@ -136,5 +145,5 @@ class ForgotPasswordViewModel(
             password.any { it.isUpperCase() } &&
             password.any { it.isLowerCase() } &&
             password.any { it.isDigit() } &&
-            password.any { !it.isLetterOrDigit() }
+            password.any { !it.isLetterOrDigit() && !it.isWhitespace() }
 }

@@ -21,15 +21,18 @@ fun ConfirmDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
     dismissLabel: String = "Cancelar",
-    isDestructive: Boolean = false
+    isDestructive: Boolean = false,
+    /** Mientras la acción confirmada sigue en vuelo: bloquea un segundo tap y cerrar el diálogo. */
+    busy: Boolean = false
 ) {
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!busy) onDismiss() },
         title = { Text(title) },
         text = { Text(message) },
         confirmButton = {
             TextButton(
                 onClick = onConfirm,
+                enabled = !busy,
                 colors = if (isDestructive) {
                     ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                 } else {
@@ -40,7 +43,7 @@ fun ConfirmDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss, enabled = !busy) {
                 Text(dismissLabel)
             }
         }
