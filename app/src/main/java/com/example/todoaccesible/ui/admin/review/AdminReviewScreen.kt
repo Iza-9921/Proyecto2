@@ -109,6 +109,7 @@ fun AdminReviewScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val exportError by viewModel.exportError.collectAsState()
+    val exporting by viewModel.exporting.collectAsState()
     val otherViewers by viewModel.otherViewers.collectAsState()
     var expandedPhotoViewer by remember { mutableStateOf<PhotoViewerState?>(null) }
     val context = LocalContext.current
@@ -123,13 +124,13 @@ fun AdminReviewScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { viewModel.exportPdf(context) }) {
+                    IconButton(onClick = { viewModel.exportPdf(context) }, enabled = !exporting) {
                         Icon(Icons.Filled.PictureAsPdf, contentDescription = "PDF del cliente")
                     }
-                    IconButton(onClick = { viewModel.exportPdfDefinitivo(context) }) {
+                    IconButton(onClick = { viewModel.exportPdfDefinitivo(context) }, enabled = !exporting) {
                         Icon(Icons.Filled.Groups, contentDescription = "PDF del administrador")
                     }
-                    IconButton(onClick = { viewModel.exportExcel(context) }) {
+                    IconButton(onClick = { viewModel.exportExcel(context) }, enabled = !exporting) {
                         Icon(Icons.Filled.TableChart, contentDescription = "Exportar Excel")
                     }
                 }
@@ -265,8 +266,6 @@ fun AdminReviewScreen(
                         FinalizeEvaluationBlock(
                             diagnostico = diagnosticoActual,
                             comentario = uiState.comentario,
-                            canFinalize = uiState.canFinalize,
-                            pendingReviewCount = uiState.pendingReviewCount,
                             onComentarioChange = viewModel::setComentario,
                             onValidar = viewModel::finalizeEvaluation,
                             onRechazar = { viewModel.setStatus(DiagnosticStatus.RECHAZADO) },
@@ -411,8 +410,6 @@ private fun QuestionReviewBlock(
 private fun FinalizeEvaluationBlock(
     diagnostico: DiagnosticEntity,
     comentario: String,
-    canFinalize: Boolean,
-    pendingReviewCount: Int,
     onComentarioChange: (String) -> Unit,
     onValidar: () -> Unit,
     onRechazar: () -> Unit,
@@ -443,18 +440,11 @@ private fun FinalizeEvaluationBlock(
                     label = { Text("Observaciones (opcional)") },
                     modifier = Modifier.fillMaxWidth()
                 )
-                if (!canFinalize) {
-                    Text(
-                        "Aún faltan $pendingReviewCount preguntas por validar antes de poder finalizar.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                }
                 OutlinedButton(onClick = onDescargarPdfDefinitivo, modifier = Modifier.fillMaxWidth()) {
                     Text("Descargar PDF con la calificación actual")
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = onValidar, enabled = canFinalize) { Text("Enviar diagnóstico") }
+                    Button(onClick = onValidar) { Text("Enviar diagnóstico") }
                     OutlinedButton(onClick = onSolicitarInfo) { Text("Solicitar información") }
                     OutlinedButton(onClick = onRechazar) { Text("Rechazar") }
                 }

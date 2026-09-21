@@ -53,9 +53,12 @@ class DiagnosticResultViewModel(
     fun submitDiagnostic(onSubmitted: () -> Unit) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(submitting = true)
-            diagnosticRepository.submit(diagnosticId)
+            val success = diagnosticRepository.submit(diagnosticId)
             _uiState.value = _uiState.value.copy(submitting = false)
-            onSubmitted()
+            // Si falló (sin conexión, error del servidor, etc.) no navegamos: el repositorio ya
+            // mostró el toast de error y el usuario se queda aquí para reintentar, en vez de creer
+            // que el diagnóstico se envió cuando en realidad se quedó sin enviar en el backend.
+            if (success) onSubmitted()
         }
     }
 
@@ -71,6 +74,7 @@ class DiagnosticResultViewModel(
     }
 
     fun exportPdf(context: Context) {
+        if (_uiState.value.exporting) return
         val diagnostic = _uiState.value.diagnostic ?: return
         val scorecard = _uiState.value.scorecard ?: return
         viewModelScope.launch {
@@ -80,6 +84,8 @@ class DiagnosticResultViewModel(
                     PdfScorecardGenerator.generate(context, diagnostic, scorecard, esDefinitivo = false)
                 }
                 FileShare.share(context, file, "application/pdf")
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(exportError = "No se pudo generar o compartir el PDF. Intenta de nuevo.")
             } finally {
                 _uiState.value = _uiState.value.copy(exporting = false)
             }

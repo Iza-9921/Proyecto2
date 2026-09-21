@@ -38,28 +38,65 @@ object PdfScorecardGenerator {
     private val TEXT_COLOR = Color.parseColor("#1A1A1A")
     private val MUTED_COLOR = Color.parseColor("#6B7280")
     private val CARD_BORDER = Color.parseColor("#D9D9D9")
+    private const val SECTION_GRID_FIRST_PAGE_TOP = 268f
+    private const val SECTION_GRID_NEXT_PAGE_TOP = 44f
+    private const val SECTION_ROW_HEIGHT = 70f
+    private const val SECTION_ROW_GAP = 8f
+    private const val PAGE_BOTTOM_MARGIN = 40f
 
     fun generate(context: Context, diagnostic: DiagnosticEntity, scorecard: ScorecardResult, esDefinitivo: Boolean = false): File {
         val document = PdfDocument()
-        val page = document.startPage(PdfDocument.PageInfo.Builder(PAGE_WIDTH, PAGE_HEIGHT, 1).create())
-        val canvas = page.canvas
+        try {
+            val sortedSections = scorecard.sections.sortedBy { it.seccionId.toIntOrNull() ?: 0 }
 
-        drawHeader(context, canvas, diagnostic, esDefinitivo)
-        drawSummaryBoxes(canvas, diagnostic, scorecard)
-        val gridBottom = drawSectionGrid(canvas, scorecard.sections)
-        var bottom = gridBottom + 14f
-        if (esDefinitivo && diagnostic.fechaValidacion != null) {
-            bottom = drawValidationInfo(canvas, diagnostic, bottom) + 10f
+            var pageNumber = 1
+            var page = document.startPage(PdfDocument.PageInfo.Builder(PAGE_WIDTH, PAGE_HEIGHT, pageNumber).create())
+            var canvas = page.canvas
+            drawHeader(context, canvas, diagnostic, esDefinitivo)
+            drawSummaryBoxes(canvas, diagnostic, scorecard)
+
+            // Dibuja la grilla de secciones repartida en tantas páginas como haga falta:
+            // con muchas secciones (categorías definidas libremente por el admin) una sola
+            // página de 792pt no alcanza y el contenido se recortaba en silencio.
+            var sectionIndex = 0
+            var gridBottom = SECTION_GRID_FIRST_PAGE_TOP
+            var startTop = SECTION_GRID_FIRST_PAGE_TOP
+            while (true) {
+                val (nextIndex, bottom) = drawSectionGridPage(canvas, sortedSections, sectionIndex, startTop)
+                sectionIndex = nextIndex
+                gridBottom = bottom
+                if (sectionIndex >= sortedSections.size) break
+                document.finishPage(page)
+                pageNumber++
+                page = document.startPage(PdfDocument.PageInfo.Builder(PAGE_WIDTH, PAGE_HEIGHT, pageNumber).create())
+                canvas = page.canvas
+                startTop = SECTION_GRID_NEXT_PAGE_TOP
+            }
+
+            var bottom = gridBottom + 14f
+            val validationBlockEstimate = if (esDefinitivo && diagnostic.fechaValidacion != null) 60f else 0f
+            val footerBlockEstimate = 110f
+            if (bottom + validationBlockEstimate + footerBlockEstimate > PAGE_HEIGHT - 24f) {
+                document.finishPage(page)
+                pageNumber++
+                page = document.startPage(PdfDocument.PageInfo.Builder(PAGE_WIDTH, PAGE_HEIGHT, pageNumber).create())
+                canvas = page.canvas
+                bottom = SECTION_GRID_NEXT_PAGE_TOP
+            }
+            if (esDefinitivo && diagnostic.fechaValidacion != null) {
+                bottom = drawValidationInfo(canvas, diagnostic, bottom) + 10f
+            }
+            drawBadgesAndLegend(context, canvas, bottom)
+
+            document.finishPage(page)
+
+            val dir = File(context.getExternalFilesDir(null), "exports").apply { mkdirs() }
+            val file = File(dir, "scorecard_${diagnostic.id}.pdf")
+            FileOutputStream(file).use { document.writeTo(it) }
+            return file
+        } finally {
+            document.close()
         }
-        drawBadgesAndLegend(context, canvas, bottom)
-
-        document.finishPage(page)
-
-        val dir = File(context.getExternalFilesDir(null), "exports").apply { mkdirs() }
-        val file = File(dir, "scorecard_${diagnostic.id}.pdf")
-        FileOutputStream(file).use { document.writeTo(it) }
-        document.close()
-        return file
     }
 
     private fun drawHeader(context: Context, canvas: Canvas, diagnostic: DiagnosticEntity, esDefinitivo: Boolean) {
@@ -139,31 +176,44 @@ object PdfScorecardGenerator {
         }
     }
 
-    /** Devuelve la coordenada Y del borde inferior de la última fila, para poder acomodar el contenido siguiente. */
-    private fun drawSectionGrid(canvas: Canvas, sections: List<SectionScore>): Float {
-        val startTop = 268f
+    /**
+     * Dibuja tantas filas de la grilla de secciones como quepan en la página actual a partir
+     * de [startIndex] (sobre [sections], ya ordenada), sin cortar ninguna fila a la mitad.
+     * Devuelve el índice de la siguiente sección pendiente (== sections.size si ya se dibujaron
+     * todas) y la coordenada Y del borde inferior de la última fila dibujada en esta página.
+     */
+    private fun drawSectionGridPage(
+        canvas: Canvas,
+        sections: List<SectionScore>,
+        startIndex: Int,
+        startTop: Float
+    ): Pair<Int, Float> {
         val columnWidth = (PAGE_WIDTH - 36f * 2 - 12f) / 2
-        val rowHeight = 70f
-        val rowGap = 8f
         var maxBottom = startTop
+        var index = startIndex
+        var row = 0
+        while (index < sections.size) {
+            val rowTop = startTop + row * (SECTION_ROW_HEIGHT + SECTION_ROW_GAP)
+            if (rowTop + SECTION_ROW_HEIGHT > PAGE_HEIGHT - PAGE_BOTTOM_MARGIN) break
+            for (column in 0 until 2) {
+                if (index >= sections.size) break
+                val section = sections[index]
+                val left = 36f + column * (columnWidth + 12f)
+                val rect = RectF(left, rowTop, left + columnWidth, rowTop + SECTION_ROW_HEIGHT)
+                drawRoundedCard(canvas, rect)
 
-        sections.sortedBy { it.seccionId.toIntOrNull() ?: 0 }.forEachIndexed { index, section ->
-            val column = index % 2
-            val row = index / 2
-            val left = 36f + column * (columnWidth + 12f)
-            val top = startTop + row * (rowHeight + rowGap)
-            val rect = RectF(left, top, left + columnWidth, top + rowHeight)
-            drawRoundedCard(canvas, rect)
+                val titlePaint = Paint().apply { color = TEXT_COLOR; textSize = 10.5f; typeface = Typeface.DEFAULT_BOLD; isAntiAlias = true }
+                canvas.drawText("${section.seccionId}. ${section.seccionNombre}", rect.left + 10f, rect.top + 16f, titlePaint)
 
-            val titlePaint = Paint().apply { color = TEXT_COLOR; textSize = 10.5f; typeface = Typeface.DEFAULT_BOLD; isAntiAlias = true }
-            canvas.drawText("${section.seccionId}. ${section.seccionNombre}", rect.left + 10f, rect.top + 16f, titlePaint)
+                drawCreditBar(canvas, "Required", section.required, rect.left + 10f, rect.top + 30f, rect.width() - 20f, REQUIRED_COLOR, compact = true)
+                drawCreditBar(canvas, "Plus", section.plus, rect.left + 10f, rect.top + 54f, rect.width() - 20f, PLUS_COLOR, compact = true)
 
-            drawCreditBar(canvas, "Required", section.required, rect.left + 10f, rect.top + 30f, rect.width() - 20f, REQUIRED_COLOR, compact = true)
-            drawCreditBar(canvas, "Plus", section.plus, rect.left + 10f, rect.top + 54f, rect.width() - 20f, PLUS_COLOR, compact = true)
-
-            maxBottom = maxOf(maxBottom, rect.bottom)
+                maxBottom = maxOf(maxBottom, rect.bottom)
+                index++
+            }
+            row++
         }
-        return maxBottom
+        return index to maxBottom
     }
 
     /** Datos de la validación oficial del admin. Devuelve la Y donde terminó de dibujar, para acomodar lo siguiente. */

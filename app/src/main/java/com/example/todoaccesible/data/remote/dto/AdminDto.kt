@@ -38,7 +38,9 @@ data class AdminDiagnosticoRowDto(
     val usuario_id: Long? = null,
     val usuario_nombre: String? = null,
     val usuario_email: String? = null,
-    val usuario_empresa: String? = null,
+    /** El backend manda un objeto (`{}` o `null`), nunca texto; con `String?` Gson tronaba
+     * ("Expected STRING but was BEGIN_OBJECT") y tumbaba TODO el listado en silencio. */
+    val usuario_empresa: EmpresaInfoDto? = null,
     val proyecto_id: Long? = null,
     val proyecto_nombre: String? = null,
     val proyecto_tipo_inmueble: String? = null

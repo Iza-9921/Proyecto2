@@ -2,6 +2,7 @@ package com.example.todoaccesible.ui.auth.register
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.todoaccesible.core.util.isValidEmail
 import com.example.todoaccesible.data.local.seed.MexicoLocations
 import com.example.todoaccesible.data.remote.ApiError
 import com.example.todoaccesible.data.remote.ApiErrorMapper
@@ -67,6 +68,10 @@ class RegisterViewModel(
             _uiState.value = state.copy(error = "Completa todos los campos")
             return
         }
+        if (!isValidEmail(state.email)) {
+            _uiState.value = state.copy(error = "Ingresa un correo electrónico válido")
+            return
+        }
         if (!isPasswordSegura(state.password)) {
             _uiState.value = state.copy(
                 error = "La contraseña debe tener al menos 8 caracteres, mayúscula, minúscula, número y un signo (ej. @, #, %)"
@@ -85,7 +90,7 @@ class RegisterViewModel(
             password.any { it.isUpperCase() } &&
             password.any { it.isLowerCase() } &&
             password.any { it.isDigit() } &&
-            password.any { !it.isLetterOrDigit() }
+            password.any { !it.isLetterOrDigit() && !it.isWhitespace() }
 
     fun backToStep1() { _uiState.value = _uiState.value.copy(step = 1, error = null) }
 
@@ -116,7 +121,7 @@ class RegisterViewModel(
             when (val result = authRepository.register(state.nombre, state.email, state.password)) {
                 is AuthResult.Success -> {
                     val draft = diagnosticRepository.getOrCreateDraft(result.session.userId)
-                    try {
+                    val projectInfoError = try {
                         diagnosticRepository.updateProjectInfo(
                             diagnosticId = draft.id,
                             projectName = state.projectName,
@@ -131,20 +136,27 @@ class RegisterViewModel(
                             fechaEvaluacion = state.fechaEvaluacion,
                             logoEmpresaUri = state.logoEmpresaUri
                         )
+                        null
                     } catch (e: Exception) {
                         // La cuenta ya se creó (register tuvo éxito); solo falló crear el proyecto/diagnóstico
                         // en el backend (p.ej. 403 licencia vencida/inactiva). Se deja el mensaje visible y el
                         // borrador se completa más tarde desde "Nuevo diagnóstico" en el dashboard.
                         val mapped = ApiErrorMapper.from(e)
-                        val message = if (mapped is ApiError.LicenciaVencida) {
+                        if (mapped is ApiError.LicenciaVencida) {
                             "Tu cuenta se creó, pero tu licencia está vencida o inactiva: contacta al administrador para poder iniciar un diagnóstico."
                         } else {
                             mapped.message
                         }
-                        _uiState.value = _uiState.value.copy(loading = false, error = message)
-                        return@launch
                     }
-                    _uiState.value = _uiState.value.copy(loading = false, showActivationNotice = true)
+                    // La cuenta queda inactiva de cualquier forma (haya fallado o no guardar el proyecto):
+                    // se cierra la sesión de inmediato para no dejar un token válido y persistido utilizable
+                    // en una cuenta bloqueada (p.ej. si el proceso muere antes de que el usuario confirme el aviso).
+                    authRepository.logout()
+                    _uiState.value = _uiState.value.copy(
+                        loading = false,
+                        error = projectInfoError,
+                        showActivationNotice = projectInfoError == null
+                    )
                 }
                 is AuthResult.Error -> {
                     _uiState.value = _uiState.value.copy(loading = false, error = result.message)
@@ -153,12 +165,9 @@ class RegisterViewModel(
         }
     }
 
-    /** El usuario confirmó el aviso: se cierra la sesión (la cuenta sigue bloqueada) y se regresa a Login. */
+    /** El usuario confirmó el aviso: se regresa a Login (la sesión ya se cerró al terminar el registro). */
     fun acknowledgeActivationNotice(onDone: () -> Unit) {
-        viewModelScope.launch {
-            authRepository.logout()
-            _uiState.value = _uiState.value.copy(showActivationNotice = false)
-            onDone()
-        }
+        _uiState.value = _uiState.value.copy(showActivationNotice = false)
+        onDone()
     }
 }

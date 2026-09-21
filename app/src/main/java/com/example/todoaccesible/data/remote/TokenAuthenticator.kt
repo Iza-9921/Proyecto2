@@ -11,6 +11,8 @@ import okhttp3.Authenticator
 import okhttp3.Request
 import okhttp3.Response
 import okhttp3.Route
+import retrofit2.HttpException
+import java.io.IOException
 
 /**
  * Ante un 401, refresca el access token con `POST /auth/refresh` (usando
@@ -54,8 +56,20 @@ class TokenAuthenticator(
                     response.request.newBuilder()
                         .header("Authorization", "Bearer ${refreshed.token}")
                         .build()
-                } catch (_: Exception) {
-                    null
+                } catch (e: HttpException) {
+                    // Solo un 401/403 del propio /auth/refresh confirma que el refresh token ya no
+                    // sirve: ahí sí dejamos que el 401 original se propague para forzar el logout.
+                    if (e.code() == 401 || e.code() == 403) {
+                        null
+                    } else {
+                        throw IOException("Fallo inesperado al refrescar el token", e)
+                    }
+                } catch (e: Exception) {
+                    // Cualquier otra falla (sin conexión, timeout, respuesta malformada, etc.) es
+                    // transitoria/inesperada, NO evidencia de que la sesión sea inválida: se envuelve
+                    // como IOException para que se reporte como error de red en vez de forzar logout
+                    // (ApiErrorMapper solo cierra sesión ante ApiError.Unauthorized).
+                    throw IOException("Fallo inesperado al refrescar el token", e)
                 }
             }
         }

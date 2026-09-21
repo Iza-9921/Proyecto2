@@ -3,6 +3,7 @@ package com.example.todoaccesible.data.remote
 import com.example.todoaccesible.data.preferences.SessionManager
 import com.example.todoaccesible.data.remote.dto.ApiErrorBody
 import com.google.gson.Gson
+import kotlinx.coroutines.CancellationException
 import retrofit2.HttpException
 import java.io.IOException
 
@@ -29,10 +30,18 @@ sealed class ApiError(val message: String) {
 object ApiErrorMapper {
     private val gson = Gson()
 
-    fun from(throwable: Throwable): ApiError = when (throwable) {
-        is HttpException -> fromHttp(throwable)
-        is IOException -> ApiError.NetworkError("Sin conexión a internet. Verifica tu red e intenta de nuevo.")
-        else -> ApiError.Generic(throwable.message ?: "Ocurrió un error inesperado.")
+    fun from(throwable: Throwable): ApiError {
+        // `CancellationException` es subclase de `Exception`: los `catch (e: Exception) { ... from(e) ... }`
+        // repartidos por toda la capa de datos la atrapaban igual que un error real (mostrando un toast y
+        // devolviendo "éxito" en vez de dejar que la cancelación se propague), rompiendo la concurrencia
+        // estructurada cuando el caller (p. ej. un viewModelScope) se cancelaba a medio request. Centralizado
+        // aquí porque casi todos esos catches pasan por `from`/`handle`.
+        if (throwable is CancellationException) throw throwable
+        return when (throwable) {
+            is HttpException -> fromHttp(throwable)
+            is IOException -> ApiError.NetworkError("Sin conexión a internet. Verifica tu red e intenta de nuevo.")
+            else -> ApiError.Generic(throwable.message ?: "Ocurrió un error inesperado.")
+        }
     }
 
     /** Además de clasificar, si es [ApiError.Unauthorized] cierra la sesión local (el token ya no sirve). */

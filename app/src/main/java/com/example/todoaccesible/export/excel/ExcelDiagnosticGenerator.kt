@@ -38,32 +38,35 @@ object ExcelDiagnosticGenerator {
 
     fun generate(context: Context, diagnostic: DiagnosticEntity, rows: List<ReviewRow>, sections: List<SectionEntity>): File {
         val workbook = XSSFWorkbook()
-        val sheet = workbook.createSheet("Scorecard")
+        try {
+            val sheet = workbook.createSheet("Scorecard")
 
-        sheet.setColumnWidth(0, 6 * 256)
-        sheet.setColumnWidth(1, 5 * 256)
-        sheet.setColumnWidth(2, 5 * 256)
-        sheet.setColumnWidth(3, 5 * 256)
-        sheet.setColumnWidth(4, 11 * 256)
-        sheet.setColumnWidth(5, 55 * 256)
-        sheet.setColumnWidth(6, 16 * 256)
-        sheet.setColumnWidth(7, 16 * 256)
-        sheet.setColumnWidth(8, 45 * 256)
+            sheet.setColumnWidth(0, 6 * 256)
+            sheet.setColumnWidth(1, 5 * 256)
+            sheet.setColumnWidth(2, 5 * 256)
+            sheet.setColumnWidth(3, 5 * 256)
+            sheet.setColumnWidth(4, 11 * 256)
+            sheet.setColumnWidth(5, 55 * 256)
+            sheet.setColumnWidth(6, 16 * 256)
+            sheet.setColumnWidth(7, 16 * 256)
+            sheet.setColumnWidth(8, 45 * 256)
 
-        val styles = Styles(workbook)
+            val styles = Styles(workbook)
 
-        var rowIndex = 0
-        rowIndex = drawCoverImage(context, workbook, sheet, rowIndex)
-        rowIndex = writeProjectInfo(sheet, styles, diagnostic, rowIndex)
-        rowIndex = writeLegend(sheet, styles, rowIndex)
-        rowIndex = writeTableHeader(sheet, styles, rowIndex)
-        writeQuestionRows(sheet, styles, rows, sections, rowIndex)
+            var rowIndex = 0
+            rowIndex = drawCoverImage(context, workbook, sheet, rowIndex)
+            rowIndex = writeProjectInfo(sheet, styles, diagnostic, rowIndex)
+            rowIndex = writeLegend(sheet, styles, rowIndex)
+            rowIndex = writeTableHeader(sheet, styles, rowIndex)
+            writeQuestionRows(sheet, styles, rows, sections, rowIndex)
 
-        val dir = File(context.getExternalFilesDir(null), "exports").apply { mkdirs() }
-        val file = File(dir, "diagnostico_${diagnostic.id}.xlsx")
-        FileOutputStream(file).use { workbook.write(it) }
-        workbook.close()
-        return file
+            val dir = File(context.getExternalFilesDir(null), "exports").apply { mkdirs() }
+            val file = File(dir, "diagnostico_${diagnostic.id}.xlsx")
+            FileOutputStream(file).use { workbook.write(it) }
+            return file
+        } finally {
+            workbook.close()
+        }
     }
 
     private fun drawCoverImage(context: Context, workbook: XSSFWorkbook, sheet: XSSFSheet, startRow: Int): Int {
@@ -114,7 +117,7 @@ object ExcelDiagnosticGenerator {
 
     private fun writeLegend(sheet: XSSFSheet, styles: Styles, startRow: Int): Int {
         sheet.createRow(startRow).createCell(0).apply {
-            setCellValue("Leyenda: AP (Aprobado)   P (Pendiente)   NC (No cumple)   0 (No aplica)")
+            setCellValue("Leyenda: AP (Aprobado)   P (Pendiente)   NC (No cumple)   NA (No aplica)")
             setCellStyle(styles.infoStyle)
         }
         return startRow + 2

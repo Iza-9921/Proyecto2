@@ -26,7 +26,7 @@ object ScorecardCalculator {
 
         val sections = questions
             .groupBy { it.seccionId }
-            .toSortedMap()
+            .toSortedMap(compareBy { it.toIntOrNull() ?: 0 })
             .map { (seccionId, sectionQuestions) ->
                 val seccionNombre = sectionQuestions.first().seccionNombre
                 val (required, plus) = scoreCredits(sectionQuestions, answers)

@@ -55,7 +55,7 @@ fun DiagnosticDetailScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { viewModel.exportPdf(context) }) {
+                    IconButton(onClick = { viewModel.exportPdf(context) }, enabled = !uiState.exporting) {
                         Icon(Icons.Filled.Share, contentDescription = "Exportar PDF")
                     }
                 }
@@ -112,7 +112,8 @@ fun DiagnosticDetailScreen(
             }
             item {
                 BigTouchButton(
-                    text = "Descargar PDF",
+                    text = if (uiState.exporting) "Generando…" else "Descargar PDF",
+                    enabled = !uiState.exporting,
                     onClick = { viewModel.exportPdf(context) }
                 )
             }

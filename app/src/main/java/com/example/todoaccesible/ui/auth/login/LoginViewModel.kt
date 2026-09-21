@@ -2,6 +2,7 @@ package com.example.todoaccesible.ui.auth.login
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.todoaccesible.core.util.isValidEmail
 import com.example.todoaccesible.data.model.Role
 import com.example.todoaccesible.data.repository.AuthRepository
 import com.example.todoaccesible.data.repository.AuthResult
@@ -33,6 +34,10 @@ class LoginViewModel(private val authRepository: AuthRepository) : ViewModel() {
         val state = _uiState.value
         if (state.email.isBlank() || state.password.isBlank()) {
             _uiState.value = state.copy(error = "Ingresa tu correo y contraseña")
+            return
+        }
+        if (!isValidEmail(state.email)) {
+            _uiState.value = state.copy(error = "Ingresa un correo electrónico válido")
             return
         }
         viewModelScope.launch {

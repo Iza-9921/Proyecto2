@@ -41,7 +41,8 @@ interface DiagnosticRepository {
     /** Cuántas de las preguntas del catálogo aún no tienen respuesta. 0 = cuestionario completo. */
     suspend fun countUnanswered(diagnosticId: Long): Int
 
-    suspend fun submit(diagnosticId: Long)
+    /** `true` si el envío se completó de verdad en el backend; `false` si falló (ver [DiagnosticRepositoryImpl]). */
+    suspend fun submit(diagnosticId: Long): Boolean
     suspend fun discardDraft(diagnosticId: Long)
 
     /** `true` si el borrador ya tiene datos capturados (nombre/ubicación o alguna respuesta), para ofrecer "continuar" vs "empezar de nuevo". */
@@ -53,7 +54,8 @@ interface DiagnosticRepository {
      * (sus respuestas ya se guardaron con [saveAnswer] mientras editaba),
      * regresa el diagnóstico a EN_REVISION y notifica a los administradores.
      */
-    suspend fun resubmitInfoAdicional(diagnosticId: Long)
+    /** `true` si el reenvío se completó de verdad en el backend; `false` si falló. */
+    suspend fun resubmitInfoAdicional(diagnosticId: Long): Boolean
 
     fun observeForCliente(clienteId: Long): Flow<List<DiagnosticEntity>>
     fun observeAllSubmitted(): Flow<List<DiagnosticEntity>>
@@ -83,4 +85,24 @@ interface DiagnosticRepository {
      * [comentario] son sus observaciones (opcional).
      */
     suspend fun finalizeOfficialScore(diagnosticId: Long, reviewerId: Long, comentario: String): ScorecardResult?
+
+    /**
+     * Traduce un id local (el alias negativo asignado a un borrador antes del primer envío) al id
+     * real que ya le asignó el backend, o lo devuelve tal cual si no es (o ya no es) un alias.
+     * Necesario para cualquier llamada fuera de este repositorio que use el diagnosticId de la UI
+     * para pegarle directo a otro repositorio/endpoint (p. ej. [QuestionReviewRepository]).
+     */
+    fun resolveId(diagnosticId: Long): Long
+
+    /**
+     * Limpia todo el estado en memoria (diagnósticos, respuestas, fotos y el mapa de alias
+     * local->real). `AppContainer` es un contenedor de proceso, no de sesión: sin esto, si un
+     * cliente y luego un admin inician sesión en la misma instalación, los alias de borrador que
+     * dejó el cliente (p. ej. `-26 -> 16`) seguían vivos y [localKeyFor] los reutilizaba para el
+     * diagnóstico del admin, guardándolo bajo esa llave negativa en vez de su id real -- la
+     * pantalla de revisión terminaba pegándole al backend con un id que no existe (404) o cayendo
+     * al catálogo de preguntas por defecto. Se llama junto con [UserRepository.clearCache] al
+     * cerrar sesión (ver `AppContainer`).
+     */
+    fun clearCache()
 }

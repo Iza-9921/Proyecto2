@@ -41,6 +41,10 @@ class UserRepositoryImpl(
 
     private val _adminUsers = MutableStateFlow<List<UserEntity>>(emptyList())
 
+    override fun clearCache() {
+        _adminUsers.value = emptyList()
+    }
+
     private suspend fun refreshAdminUsers() {
         try {
             _adminUsers.value = adminApi.listarUsuarios().map { it.toEntity() }
@@ -90,9 +94,8 @@ class UserRepositoryImpl(
     /** No hay endpoint para renombrar un usuario desde el panel admin. No-op intencional. */
     override suspend fun updateNombre(userId: Long, nombre: String) = Unit
 
-    override suspend fun setLicenseActive(userId: Long, active: Boolean) {
+    override suspend fun setLicenseActive(userId: Long, active: Boolean): Boolean =
         runApi { adminApi.setActivo(userId, ActivoRequest(active)) }
-    }
 
     override suspend fun delete(userId: Long) {
         runApi { adminApi.eliminarUsuario(userId) }
@@ -121,17 +124,18 @@ class UserRepositoryImpl(
         runApi { adminApi.decrementarLimite(userId) }
     }
 
-    override suspend fun assignCuestionario(userId: Long, tipo: String) {
+    override suspend fun assignCuestionario(userId: Long, tipo: String): Boolean =
         runApi { adminApi.setCuestionarioAsignado(userId, CuestionarioAsignadoRequest(tipo)) }
-    }
 
-    private suspend fun runApi(block: suspend () -> Unit) {
-        try {
+    private suspend fun runApi(block: suspend () -> Unit): Boolean {
+        return try {
             block()
             refreshAdminUsers()
+            true
         } catch (e: Exception) {
             val mapped = ApiErrorMapper.handle(e, sessionManager)
             toastController.show(mapped.message, ToastTipo.ERROR)
+            false
         }
     }
 }

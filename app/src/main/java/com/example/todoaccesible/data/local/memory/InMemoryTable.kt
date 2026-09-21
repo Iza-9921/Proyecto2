@@ -6,10 +6,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 
 /**
- * Reemplaza a Room/SQLite: guarda una lista en memoria (se pierde al cerrar la
- * app, no hay backend ni base de datos). `initial` sirve para sembrar datos
- * por defecto (usuario admin, catálogo de preguntas, etc.) al construir el
- * AppContainer.
+ * Tabla simple en memoria (se pierde al cerrar la app). De la época pre-backend-real; ahora que
+ * usuarios/catálogo de preguntas/etc. vienen del backend por Retrofit, el único uso que le queda es
+ * [com.example.todoaccesible.data.repository.impl.PresenceRepositoryImpl] (presencia "quién más está
+ * viendo este diagnóstico", que no tiene ningún equivalente en el backend y se deja local a propósito).
  */
 class InMemoryTable<T>(initial: List<T> = emptyList()) {
     private val state = MutableStateFlow(initial)

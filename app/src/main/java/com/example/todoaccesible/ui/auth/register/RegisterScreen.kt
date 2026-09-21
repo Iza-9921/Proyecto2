@@ -1,5 +1,6 @@
 package com.example.todoaccesible.ui.auth.register
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -44,6 +45,13 @@ fun RegisterScreen(
     val uiState by viewModel.uiState.collectAsState()
     var passwordVisible by remember { mutableStateOf(false) }
     var confirmPasswordVisible by remember { mutableStateOf(false) }
+
+    // Sin esto, el back del sistema (gesto/botón) en el paso 2 salía de toda la pantalla de
+    // registro (perdiendo los datos de la empresa ya capturados) en vez de solo volver al paso 1,
+    // como sí hace el botón "Atrás" propio de la pantalla.
+    BackHandler(enabled = uiState.step == 2 && !uiState.loading) {
+        viewModel.backToStep1()
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         TopAppBar(title = { Text(if (uiState.step == 1) "Crear cuenta · Paso 1 de 2" else "Registro de la empresa · Paso 2 de 2") })

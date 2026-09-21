@@ -153,11 +153,18 @@ class QuestionCatalogViewModel(
 
     fun confirmDeleteTipo() {
         val tipo = _selectedTipo.value
+        if (!tipoActionInFlight.compareAndSet(false, true)) return
+        _tipoActionBusy.value = true
         viewModelScope.launch {
-            tipoRepository.deleteTipo(tipo)
-            if (tipo !in tipos.value) {
-                _selectedTipo.value = tipos.value.firstOrNull().orEmpty()
-                closeDialog()
+            try {
+                tipoRepository.deleteTipo(tipo)
+                if (tipo !in tipos.value) {
+                    _selectedTipo.value = tipos.value.firstOrNull().orEmpty()
+                    closeDialog()
+                }
+            } finally {
+                _tipoActionBusy.value = false
+                tipoActionInFlight.set(false)
             }
         }
     }

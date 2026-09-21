@@ -36,14 +36,21 @@ class SocketManager(
 
     private var socket: Socket? = null
     private var connectedUserId: Long? = null
+    private var connectedAccessToken: String? = null
 
     fun connect(userId: Long, accessToken: String) {
-        if (connectedUserId == userId && socket?.connected() == true) return
+        // El access token rota cada ~10-15 min (heartbeat/refresh); si no comparamos también el
+        // token, este guard dejaba el socket viejo (con el token original horneado en `auth`)
+        // conectado indefinidamente y las reconexiones automáticas de socket.io lo seguían usando.
+        if (connectedUserId == userId && connectedAccessToken == accessToken && socket?.connected() == true) return
         disconnect()
 
         val options = IO.Options().apply {
             auth = mapOf("token" to accessToken)
             reconnection = true
+            // Fuerza un Manager nuevo en vez de reusar uno cacheado por URL: así no hay riesgo de
+            // que el cliente de socket.io reuse una conexión existente con el `auth` (token) viejo.
+            forceNew = true
         }
         val newSocket = IO.socket(BuildConfig.SOCKET_BASE_URL, options)
 
@@ -53,6 +60,7 @@ class SocketManager(
         newSocket.connect()
         socket = newSocket
         connectedUserId = userId
+        connectedAccessToken = accessToken
     }
 
     fun disconnect() {
@@ -60,6 +68,7 @@ class SocketManager(
         socket?.disconnect()
         socket = null
         connectedUserId = null
+        connectedAccessToken = null
     }
 
     private fun handleNotificacion(args: Array<Any>, fallbackUserId: Long) {

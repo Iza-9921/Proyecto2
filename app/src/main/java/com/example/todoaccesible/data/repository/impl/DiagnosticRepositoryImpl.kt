@@ -122,7 +122,21 @@ class DiagnosticRepositoryImpl(
 
     private val syncJobs = ConcurrentHashMap<String, Job>()
 
-    private fun resolveId(aliasId: Long): Long = idAliasMap[aliasId] ?: aliasId
+    private fun resolveLocalId(aliasId: Long): Long = idAliasMap[aliasId] ?: aliasId
+
+    override fun resolveId(diagnosticId: Long): Long = resolveLocalId(diagnosticId)
+
+    override fun clearCache() {
+        syncJobs.values.forEach { it.cancel() }
+        syncJobs.clear()
+        _diagnostics.value = emptyMap()
+        _answers.value = emptyMap()
+        _photos.value = emptyMap()
+        idAliasMap.clear()
+        diagnosticToProyectoId.clear()
+        discardedIds.clear()
+        confirmedEvidenciaIds.clear()
+    }
 
     /**
      * Inverso de [resolveId]: si [realId] ya es el destino de un alias local
@@ -224,7 +238,7 @@ class DiagnosticRepositoryImpl(
             revision = revision, logoEmpresaUri = logoEmpresaUri
         )
 
-        val realId = resolveId(diagnosticId)
+        val realId = resolveLocalId(diagnosticId)
         if (realId < 0) {
             // Todavía no existe nada en el backend: se crea Proyecto + se inicia el Diagnostico.
             // OJO: no se envuelve en try/catch a propósito -- si el backend responde 403 "Licencia
@@ -329,7 +343,7 @@ class DiagnosticRepositoryImpl(
     }
 
     private suspend fun syncSingleAnswer(diagnosticId: Long, codigo: String) {
-        val realId = resolveId(diagnosticId)
+        val realId = resolveLocalId(diagnosticId)
         if (realId < 0) return
         val answer = _answers.value[diagnosticId]?.find { it.questionCodigo == codigo } ?: return
         if (answer.valor == null) return
@@ -340,7 +354,7 @@ class DiagnosticRepositoryImpl(
 
     /** Cancela los debounces pendientes de este diagnóstico y empuja TODAS las respuestas de un jalón (usado antes de enviar/reenviar). */
     private suspend fun syncAllAnswersNow(diagnosticId: Long) {
-        val realId = resolveId(diagnosticId)
+        val realId = resolveLocalId(diagnosticId)
         if (realId < 0) return
         syncJobs.keys.filter { it.startsWith("$diagnosticId#") }.forEach { syncJobs.remove(it)?.cancel() }
         val answers = _answers.value[diagnosticId].orEmpty().filter { it.valor != null }
@@ -464,23 +478,28 @@ class DiagnosticRepositoryImpl(
 
     // ---- Envío / ciclo de vida ----
 
-    override suspend fun submit(diagnosticId: Long) {
-        try {
+    override suspend fun submit(diagnosticId: Long): Boolean {
+        return try {
             syncAllAnswersNow(diagnosticId)
             recalculateScore(diagnosticId)
-            diagnosticoApi.finalizar(resolveId(diagnosticId))
+            diagnosticoApi.finalizar(resolveLocalId(diagnosticId))
             refreshDiagnosticDetail(diagnosticId)
             // El backend no descuenta `limiteCuestionarios` automáticamente al enviar
             // (es puramente informativo, solo el admin lo ajusta vía +1/-1) y el
             // endpoint que lo haría es admin-only — llamarlo aquí como cliente
             // siempre daba 403. No hay nada que sincronizar tras un envío exitoso.
+            true
         } catch (e: Exception) {
+            // Antes se tragaba el error y quien llamaba (p. ej. DiagnosticResultViewModel)
+            // navegaba igual como si el envío hubiera funcionado, dejando el diagnóstico
+            // sin enviar de verdad en el backend. Ahora se reporta el false positivo al caller.
             reportError(e)
+            false
         }
     }
 
     override suspend fun discardDraft(diagnosticId: Long) {
-        val realId = resolveId(diagnosticId)
+        val realId = resolveLocalId(diagnosticId)
         if (realId > 0) discardedIds.add(realId)
         idAliasMap.remove(diagnosticId)
         diagnosticToProyectoId.remove(diagnosticId)
@@ -498,16 +517,25 @@ class DiagnosticRepositoryImpl(
         return _answers.value[diagnosticId].orEmpty().any { it.valor != null }
     }
 
-    override suspend fun resubmitInfoAdicional(diagnosticId: Long) {
-        try {
+    override suspend fun resubmitInfoAdicional(diagnosticId: Long): Boolean {
+        return try {
             syncAllAnswersNow(diagnosticId)
-            val flaggedCodes = questionReviewRepository.observeForDiagnostic(diagnosticId).first()
+            // `diagnosticId` puede seguir siendo el alias local (negativo) asignado antes del primer
+            // envío; questionReviewRepository llama directo a `GET /diagnosticos/:id` con lo que se le
+            // pase, así que hay que traducirlo al id real del backend o la consulta falla en silencio
+            // (ningún código queda marcado SOLICITAR_INFO) y esta pantalla parece no tener nada que hacer.
+            val realId = resolveLocalId(diagnosticId)
+            val flaggedCodes = questionReviewRepository.observeForDiagnostic(realId).first()
                 .filter { it.status == QuestionReviewStatus.SOLICITAR_INFO }
                 .map { it.questionCodigo }
-            flaggedCodes.forEach { questionReviewRepository.resetForResubmission(diagnosticId, it) }
+            flaggedCodes.forEach { questionReviewRepository.resetForResubmission(realId, it) }
             refreshDiagnosticDetail(diagnosticId)
+            true
         } catch (e: Exception) {
+            // Igual que en submit(): antes se tragaba el error y ResponderInfoAdicionalViewModel
+            // navegaba igual como si el reenvío hubiera funcionado.
             reportError(e)
+            false
         }
     }
 
@@ -538,7 +566,8 @@ class DiagnosticRepositoryImpl(
                 idAliasMap[key] = raw.id
                 diagnosticToProyectoId[key] = raw.proyecto_id
                 val meta = localMetaStore.get(key)
-                _diagnostics.update { it + (key to buildEntityFromRawClient(raw, meta, key)) }
+                val tipoInmueble = resolveTipoInmuebleCliente(raw.proyecto_id, meta.tipoInmueble)
+                _diagnostics.update { it + (key to buildEntityFromRawClient(raw, meta, key, tipoInmueble)) }
             }
         } else {
             val response = adminApi.listarDiagnosticos(mapOf("usuario_id" to clienteId.toString(), "limit" to "100"))
@@ -558,7 +587,7 @@ class DiagnosticRepositoryImpl(
     }
 
     private suspend fun refreshDiagnosticDetail(aliasId: Long) {
-        val realId = resolveId(aliasId)
+        val realId = resolveLocalId(aliasId)
         if (realId < 0) return // borrador que todavía no existe en el backend: nada que traer.
         val rol = sessionManager.session.first()?.rol ?: Role.CLIENTE
         try {
@@ -573,19 +602,26 @@ class DiagnosticRepositoryImpl(
         }
     }
 
+    /**
+     * El detalle de diagnóstico como cliente (`obtenerParaCliente`) nunca trae el tipo de
+     * inmueble: esa columna vive en `proyectos`, no en `diagnosticos` (igual que en el
+     * frontend web, que hace su propio GET /proyectos/:id aparte). `meta.tipoInmueble` solo
+     * tiene valor si el diagnóstico se creó como borrador en ESTE dispositivo; para uno
+     * creado en otro lado (web, otro celular, datos de prueba) queda vacío y el catálogo de
+     * preguntas caía al tipo "Otro" (el más grande, ~180 preguntas) en vez del real -- exactamente
+     * lo que le pasaba a [refreshListForCliente], que construía la entidad de lista sin este
+     * fallback y por eso mostraba las secciones de "Otro" en vez de las del tipo real asignado.
+     */
+    private suspend fun resolveTipoInmuebleCliente(proyectoId: Long, tipoCacheado: String): String =
+        tipoCacheado.ifBlank {
+            runCatching { proyectoApi.obtener(proyectoId).tipo_inmueble }.getOrNull().orEmpty()
+        }
+
     private suspend fun applyClienteDetail(aliasId: Long, dto: DiagnosticoClienteDetailDto) {
         val raw = dto.diagnostico
         diagnosticToProyectoId[aliasId] = raw.proyecto_id
         val meta = localMetaStore.get(aliasId)
-        // El detalle de diagnóstico como cliente (`obtenerParaCliente`) nunca trae el tipo de
-        // inmueble: esa columna vive en `proyectos`, no en `diagnosticos` (igual que en el
-        // frontend web, que hace su propio GET /proyectos/:id aparte). `meta.tipoInmueble` solo
-        // tiene valor si el diagnóstico se creó como borrador en ESTE dispositivo; para uno
-        // creado en otro lado (web, otro celular, datos de prueba) queda vacío y el catálogo de
-        // preguntas caía al tipo "Otro" (el más grande, ~180 preguntas) en vez del real.
-        val tipoInmueble = meta.tipoInmueble.ifBlank {
-            runCatching { proyectoApi.obtener(raw.proyecto_id).tipo_inmueble }.getOrNull().orEmpty()
-        }
+        val tipoInmueble = resolveTipoInmuebleCliente(raw.proyecto_id, meta.tipoInmueble)
 
         val answers = dto.preguntas.map { p ->
             AnswerEntity(
@@ -703,7 +739,7 @@ class DiagnosticRepositoryImpl(
     // ---- Acciones de administrador ----
 
     override suspend fun updateStatus(id: Long, status: DiagnosticStatus, reviewerId: Long?, comentario: String) {
-        val realId = resolveId(id)
+        val realId = resolveLocalId(id)
         try {
             val observaciones = buildObservacionesPorPregunta(id, comentario)
             when (status) {
@@ -726,7 +762,7 @@ class DiagnosticRepositoryImpl(
      * quedaban en el estado local y nunca llegaban al usuario).
      */
     private suspend fun buildObservacionesPorPregunta(diagnosticId: Long, comentarioGeneral: String): Map<String, String> {
-        val porPregunta = questionReviewRepository.observeForDiagnostic(diagnosticId).first()
+        val porPregunta = questionReviewRepository.observeForDiagnostic(resolveLocalId(diagnosticId)).first()
             .filter { it.comentario.isNotBlank() }
             .associate { it.questionCodigo to it.comentario }
         return if (comentarioGeneral.isNotBlank()) porPregunta + ("general" to comentarioGeneral) else porPregunta
@@ -740,7 +776,7 @@ class DiagnosticRepositoryImpl(
         val scorecardQuestions = questions.map {
             ScorecardQuestion(it.codigo, it.seccionId, sectionNameById[it.seccionId] ?: it.seccionId, it.credito)
         }
-        val reviewByCode = questionReviewRepository.observeForDiagnostic(diagnosticId).first().associate { it.questionCodigo to it.status }
+        val reviewByCode = questionReviewRepository.observeForDiagnostic(resolveLocalId(diagnosticId)).first().associate { it.questionCodigo to it.status }
         val answerValues = questions.associate { it.codigo to (reviewByCode[it.codigo]?.toAnswerValue() ?: AnswerValue.PENDIENTE) }
         return ScorecardCalculator.calculate(scorecardQuestions, answerValues)
     }
@@ -749,7 +785,7 @@ class DiagnosticRepositoryImpl(
         val result = getOfficialScore(diagnosticId) ?: return null
         try {
             diagnosticoApi.aprobar(
-                resolveId(diagnosticId),
+                resolveLocalId(diagnosticId),
                 AprobarRequest(observaciones = buildObservacionesPorPregunta(diagnosticId, comentario))
             )
             val reviewerName = userRepository.observeById(reviewerId).first()?.nombre
